@@ -474,6 +474,19 @@ kbd {
 .demo-bar__buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
 .demo-bar__hint { font-size: .82rem; color: var(--text-faint); margin: .55rem 0 0; }
 
+.demo-info {
+  margin-top: .7rem;
+  padding: .6rem .8rem;
+  border: 1px solid #6b5518;
+  border-left: 4px solid var(--sev-medium);
+  border-radius: var(--radius-sm);
+  background: var(--sev-medium-bg);
+}
+.demo-info__line { margin: 0 0 .3rem; font-size: .87rem; }
+.demo-info__line:last-child { margin-bottom: 0; }
+.demo-info__expect { color: var(--text-muted); }
+.demo-info strong { color: var(--sev-medium); }
+
 /* --------------------------------------------------------------------------
    14. Statistics tiles
    -------------------------------------------------------------------------- */

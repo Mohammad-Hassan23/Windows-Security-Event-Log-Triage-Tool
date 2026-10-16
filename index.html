@@ -194,7 +194,8 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
         <span class="badge badge--demo" id="demo-chip" hidden>Demo Data</span>
       </div>
       <p class="demo-bar__note">
-        Fictional teaching data &mdash; invented users, computers and private (RFC 1918) IP addresses only.
+        Fictional teaching data &mdash; invented users, computers and private (RFC 1918) or
+        documentation (RFC 5737) IP addresses only.
       </p>
       <div class="demo-bar__buttons" role="group" aria-label="Load demo datasets">
         <button type="button" class="btn btn--ghost" id="btn-sample-normal" disabled>Load Normal Sample</button>
@@ -202,8 +203,9 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
         <button type="button" class="btn btn--ghost" id="btn-sample-privilege" disabled>Load Privilege Escalation Sample</button>
         <button type="button" class="btn btn--ghost" id="btn-sample-mixed" disabled>Load Mixed SOC Sample</button>
       </div>
+      <div class="demo-info" id="demo-info" hidden></div>
       <p class="demo-bar__hint" id="demo-hint">
-        Demo datasets are wired up in the next build step.
+        These four datasets load instantly and work offline. Loading one changes nothing on your computer.
       </p>
     </div>
   </section>
@@ -425,8 +427,14 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
   Classic scripts, loaded in order. Deliberately NOT ES modules, because
   <script type="module"> is blocked by browsers when the page is opened from a
   file:// path, which would break the "just double-click index.html" workflow.
+
+  sample-data.js is the embedded copy of the four demo datasets. It is a plain
+  script rather than a fetch() call for the same reason: a page opened from
+  file:// is not allowed to read other local files, so fetching the .csv files
+  would fail exactly when the student double-clicks index.html.
 -->
 <script src="triage-core.js"></script>
+<script src="samples/sample-data.js"></script>
 <script src="script.js"></script>
 
 </body>

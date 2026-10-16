@@ -1,0 +1,64 @@
+Level,Date and Time,Source,Event ID,Task Category,User,Computer,Keywords,Message
+Information,2026-04-08T09:00:12,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\labadmin,WIN10-LAB04,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB04$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: labadmin
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: ADMIN-PC
+ Source Network Address: 192.168.10.5
+ Source Port: 0"
+Information,2026-04-08T09:02:35,Microsoft-Windows-Security-Auditing,4720,User Account Management,LAB\labadmin,WIN10-LAB04,Audit Success,"A user account was created.
+
+Subject:
+ Account Name: labadmin
+ Account Domain: LAB
+
+New Account:
+ Account Name: temp-admin
+ Account Domain: LAB
+
+Attributes:
+ SAM Account Name: temp-admin
+ User Account Control: Account Enabled"
+Information,2026-04-08T09:04:10,Microsoft-Windows-Security-Auditing,4732,Security Group Management,LAB\labadmin,WIN10-LAB04,Audit Success,"A member was added to a security-enabled local group.
+
+Member:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1150
+ Account Name: temp-admin
+ Account Domain: LAB
+
+Group:
+ Group Name: Administrators
+ Group Domain: BUILTIN
+
+Subject:
+ Account Name: labadmin
+ Account Domain: LAB"
+Information,2026-04-08T09:07:48,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\temp-admin,WIN10-LAB04,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB04$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: temp-admin
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: ADMIN-PC
+ Source Network Address: 192.168.10.5
+ Source Port: 0"

@@ -1,0 +1,229 @@
+Level,Date and Time,Source,Event ID,Task Category,User,Computer,Keywords,Message
+Information,2026-04-09T01:09:58,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:10:31,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:11:04,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:11:39,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:12:15,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:12:51,Microsoft-Windows-Security-Auditing,4625,Logon,-,FILESRV01,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Type: 3
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23"
+Information,2026-04-09T01:16:22,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\svc-backup,FILESRV01,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: FILESRV01$
+
+Logon Information:
+ Logon Type: 3
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: -
+ Source Network Address: 198.51.100.23
+ Source Port: 0"
+Information,2026-04-09T01:18:03,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\svc-backup,FILESRV01,Audit Success,"A new process has been created.
+
+New Process Name: C:\Windows\System32\cmd.exe
+ Creator Process Name: C:\Windows\System32\services.exe
+ Process Command Line: cmd.exe /c net user helpdesk-temp /add
+
+Subject:
+ Account Name: svc-backup
+ Account Domain: LAB"
+Information,2026-04-09T01:25:40,Microsoft-Windows-Security-Auditing,4720,User Account Management,LAB\svc-backup,FILESRV01,Audit Success,"A user account was created.
+
+Subject:
+ Account Name: svc-backup
+ Account Domain: LAB
+
+New Account:
+ Account Name: helpdesk-temp
+ Account Domain: LAB
+
+Attributes:
+ SAM Account Name: helpdesk-temp
+ User Account Control: Account Enabled"
+Information,2026-04-09T01:27:15,Microsoft-Windows-Security-Auditing,4732,Security Group Management,LAB\svc-backup,FILESRV01,Audit Success,"A member was added to a security-enabled local group.
+
+Member:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1150
+ Account Name: helpdesk-temp
+ Account Domain: LAB
+
+Group:
+ Group Name: Administrators
+ Group Domain: BUILTIN
+
+Subject:
+ Account Name: svc-backup
+ Account Domain: LAB"
+Information,2026-04-09T01:29:44,Service Control Manager,7045,None,SYSTEM,FILESRV01,,"A service was installed in the system.
+
+Service Name: LabUpdaterSvc
+Service File Name: C:\ProgramData\LabUpdater\updater.exe
+Service Type: user mode service
+Service Start Type: auto start
+Service Account: LocalSystem"
+Information,2026-04-09T01:33:02,Microsoft-Windows-PowerShell,4104,Execute a Remote Command,LAB\svc-backup,FILESRV01,,"Creating Scriptblock text (1 of 1):
+powershell.exe -EncodedCommand R2V0LVNlcnZpY2U=
+
+ScriptBlock ID: 11111111-2222-3333-4444-5555
+Path:
+
+Account Name: svc-backup"
+Information,2026-04-09T02:30:19,Microsoft-Windows-Security-Auditing,4726,User Account Management,LAB\svc-backup,FILESRV01,Audit Success,"A user account was deleted.
+
+Subject:
+ Account Name: svc-backup
+ Account Domain: LAB
+
+Target Account:
+ Account Name: helpdesk-temp
+ Account Domain: LAB"
+Information,2026-04-09T02:45:07,Microsoft-Windows-Security-Auditing,1102,Audit Policy Change,LAB\svc-backup,FILESRV01,Audit Success,"The audit log was cleared.
+
+Subject:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1103
+ Account Name: svc-backup
+ Account Domain: LAB
+ Logon ID: 0x1A2B3C"
+Information,2026-04-09T09:02:11,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\labadmin,WIN10-LAB01,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB01$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: labadmin
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: ADMIN-PC
+ Source Network Address: 192.168.10.5
+ Source Port: 0"

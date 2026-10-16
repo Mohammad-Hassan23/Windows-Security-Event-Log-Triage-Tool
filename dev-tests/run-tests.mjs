@@ -458,10 +458,11 @@ test('the page loads nothing from the internet', function () {
   assertNoMatch(css, /url\(\s*["']?https?:/i, 'the stylesheet must not load remote assets');
 });
 
-test('the page only loads the two local scripts it needs', function () {
+test('the page only loads the local scripts it needs', function () {
   const html = readSource('index.html');
   const sources = Array.from(html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)).map(function (m) { return m[1]; });
-  assertEqual(sources.join(','), 'triage-core.js,script.js', 'only the local engine and interface should load');
+  assertEqual(sources.join(','), 'triage-core.js,samples/sample-data.js,script.js',
+    'only the local engine, the embedded demo data and the interface should load');
 });
 
 test('the content security policy blocks outbound connections', function () {
@@ -515,6 +516,9 @@ test('helpers behave as documented', function () {
   assertEqual(Core.normalizeHeader('\uFEFFEvent ID'), 'eventid');
   assertEqual(Core.formatDuration(90000), '1m 30s');
   assertEqual(Core.formatDuration(3600000), '1h 0m');
+  assertEqual(Core.truncate('abcdef', 3), 'abc ... [shortened]');
+});
+
 /* --------------------------------------------------------------------------
    Tests: page wiring
    --------------------------------------------------------------------------
@@ -530,6 +534,8 @@ group('Page wiring');
 test('every element id used by the interface exists in index.html', function () {
   const html = readSource('index.html');
   const js = readSource('script.js');
+  // Element ids are also referenced from the demo dataset definitions.
+  const references = js + readSource('samples/sample-data.js');
 
   const htmlIds = new Set(Array.from(html.matchAll(/\sid="([^"]+)"/g)).map(function (m) { return m[1]; }));
 
@@ -550,7 +556,7 @@ test('every element id used by the interface exists in index.html', function () 
     if (id === 'main') return false;
     const occurrences = (html.match(new RegExp('"' + id + '"', 'g')) || []).length;
     const referencedInHtml = occurrences > 1;
-    const referencedInJs = js.indexOf("'" + id + "'") !== -1 || js.indexOf('"' + id + '"') !== -1;
+    const referencedInJs = references.indexOf("'" + id + "'") !== -1 || references.indexOf('"' + id + '"') !== -1;
     return !referencedInHtml && !referencedInJs;
   });
   assertEqual(unused.join(','), '', 'these ids exist in index.html but are never used');
@@ -629,11 +635,330 @@ test('script.js loads and initialises against a stubbed DOM without throwing', f
 
   // The status line should have been set by init(), proving the code really ran.
   assertIncludes(elements['status-region'].textContent, 'No file loaded yet', 'init() should have set the status message');
+/* --------------------------------------------------------------------------
+   A fuller page stub, used to actually CLICK the demo buttons.
+   --------------------------------------------------------------------------
+   This is the closest thing to a click-through test that is possible without a
+   browser: the three real files are loaded in a sandbox, and the recorded click
+   handlers are invoked exactly as a user's click would be.
+   -------------------------------------------------------------------------- */
+function loadPage() {
+  const vm = require('node:vm');
+  const elements = {};
+
+  function makeElement(tagName) {
+    const node = {
+      tagName: tagName,
+      id: '',
+      className: '',
+      textContent: '',
+      colSpan: 0,
+      value: '',
+      disabled: false,
+      children: [],
+      attributes: {},
+      listeners: {},
+      classList: { add: function () {}, remove: function () {} },
+      setAttribute: function (name, value) { node.attributes[name] = String(value); },
+      getAttribute: function (name) { return node.attributes[name]; },
+      removeAttribute: function (name) { delete node.attributes[name]; },
+      appendChild: function (child) { node.children.push(child); return child; },
+      removeChild: function (child) {
+        node.children = node.children.filter(function (c) { return c !== child; });
+        return child;
+      },
+      addEventListener: function (type, fn) {
+        node.listeners[type] = node.listeners[type] || [];
+        node.listeners[type].push(fn);
+      },
+      querySelectorAll: function () { return []; },
+      scrollIntoView: function () {},
+      get firstChild() { return node.children[0] || null; },
+      get childNodes() { return node.children; }
+    };
+    return node;
+  }
+
+  const documentStub = {
+    readyState: 'complete',
+    getElementById: function (id) {
+      if (!Object.prototype.hasOwnProperty.call(elements, id)) {
+        const node = makeElement('div');
+        node.id = id;
+        elements[id] = node;
+      }
+      return elements[id];
+    },
+    createElement: function (tagName) { return makeElement(tagName); },
+    addEventListener: function () {},
+    querySelectorAll: function () { return []; }
+  };
+
+  const sandbox = {
+    document: documentStub,
+    console: console,
+    TextDecoder: TextDecoder,
+    ArrayBuffer: ArrayBuffer,
+    Uint8Array: Uint8Array,
+    FileReader: function () {},
+    addEventListener: function () {},
+    removeEventListener: function () {}
+  };
+  sandbox.window = sandbox;
+
+  const context = vm.createContext(sandbox);
+  // Loaded in the same order as index.html.
+  vm.runInContext(readSource('triage-core.js'), context, { filename: 'triage-core.js' });
+  vm.runInContext(readSource('samples/sample-data.js'), context, { filename: 'sample-data.js' });
+  vm.runInContext(readSource('script.js'), context, { filename: 'script.js' });
+
+  return { elements: elements, sandbox: sandbox };
+}
+
+/** setHidden() sets the attribute to an empty string, so check for presence. */
+function isHidden(node) {
+  return Object.prototype.hasOwnProperty.call(node.attributes, 'hidden');
+}
+
+test('the demo buttons are enabled once the sample data loads', function () {
+  const page = loadPage();
+  const sampleData = page.sandbox.window.TRIAGE_SAMPLE_DATA;
+  assert(sampleData, 'the embedded demo data should be available to the page');
+
+  Object.keys(sampleData).forEach(function (key) {
+    const button = page.elements[sampleData[key].buttonId];
+    assert(button, 'the page should have looked up the button for ' + key);
+    assertEqual(button.disabled, false, 'the button for ' + key + ' should be enabled');
+    assertEqual((button.listeners.click || []).length, 1, 'the button for ' + key + ' should have one click handler');
+  });
 });
 
 
-  assertEqual(Core.truncate('abcdef', 3), 'abc ... [shortened]');
+test('clicking each demo button loads its dataset and labels it Demo Data', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  Object.keys(sampleData).forEach(function (key) {
+    const dataset = sampleData[key];
+    const button = page.elements[dataset.buttonId];
+    const handler = (button.listeners.click || [])[0];
+    assert(handler, 'the button for ' + key + ' should be clickable');
+
+    handler(); // <-- the click
+
+    const status = page.elements['status-region'].textContent;
+    const expectedEvents = Core.parse(dataset.csv).stats.events;
+
+    assertIncludes(status, 'Demo Data', key + ' must be labelled as Demo Data in the status line');
+    assertIncludes(status, expectedEvents + ' events', key + ' should report its event count (' + expectedEvents + ')');
+    assertIncludes(status, dataset.file, key + ' should name its file');
+
+    assertEqual(page.elements['demo-chip'].attributes.hidden, undefined, 'the Demo Data chip should be visible for ' + key);
+    assertEqual(page.elements['parse-panel'].attributes.hidden, undefined, 'the parse panel should be shown for ' + key);
+    assert(page.elements['preview-body'].children.length > 0, 'the preview table should be filled for ' + key);
+    assertEqual(page.elements['demo-info'].children.length, 3, 'the demo description should be shown for ' + key);
+    assertEqual(page.elements['stat-events'].textContent, String(expectedEvents), 'the event counter should match for ' + key);
+    assert(isHidden(page.elements['error-region']), 'no error should be shown for ' + key);
+  });
 });
+
+test('clearing the loaded data removes the Demo Data labelling', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  const demoHandler = (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0];
+  demoHandler();
+  assertEqual(page.elements['demo-chip'].attributes.hidden, undefined, 'the chip should be visible after loading a demo');
+
+  const resetHandler = (page.elements['btn-reset'].listeners.click || [])[0];
+  assert(resetHandler, 'the clear button should be wired up');
+  resetHandler();
+
+  assert(isHidden(page.elements['demo-chip']), 'the chip should be hidden again');
+  assert(isHidden(page.elements['parse-panel']), 'the parse panel should be hidden again');
+  assertIncludes(page.elements['status-region'].textContent, 'No file loaded yet', 'the status should reset');
+});
+
+
+});
+
+
+/* --------------------------------------------------------------------------
+   Tests: the four demo datasets
+   --------------------------------------------------------------------------
+   These check the DATA itself: that it loads, that it matches the .csv files
+   on disk, and that it contains the pattern each scenario exists to show. The
+   findings those patterns should produce are asserted when the detection rules
+   are built; at this stage the tool only parses and reports.
+   -------------------------------------------------------------------------- */
+group('Demo datasets');
+
+const SAMPLES = require(path.join(root, 'samples/sample-data.js'));
+
+function parseSample(csv) {
+  const result = Core.parse(csv);
+  assert(result.ok, 'the dataset should parse');
+  return result;
+}
+
+function countId(events, id) {
+  return events.filter(function (e) { return e.eventId === id; }).length;
+}
+
+function messageCount(events, id, needle) {
+  return events.filter(function (e) {
+    return e.eventId === id && e.message.indexOf(needle) !== -1;
+  }).length;
+}
+
+test('all four demo datasets are present and named as documented', function () {
+  assertEqual(Object.keys(SAMPLES).sort().join(','), 'guessing,mixed,normal,persistence');
+  assertEqual(SAMPLES.normal.file, 'normal-windows-events.csv');
+  assertEqual(SAMPLES.guessing.file, 'password-guessing.csv');
+  assertEqual(SAMPLES.persistence.file, 'account-persistence.csv');
+  assertEqual(SAMPLES.mixed.file, 'suspicious-admin-activity.csv');
+});
+
+test('the embedded demo data matches the .csv files on disk exactly', function () {
+  Object.keys(SAMPLES).forEach(function (key) {
+    const dataset = SAMPLES[key];
+    const onDisk = fs.readFileSync(path.join(root, 'samples', dataset.file), 'utf8').replace(/\r\n/g, '\n');
+    assertEqual(dataset.csv.replace(/\r\n/g, '\n'), onDisk,
+      'samples/' + dataset.file + ' has drifted from the embedded copy - run: node dev-tests/build-samples.mjs');
+  });
+});
+
+test('every dataset is labelled as demo data and has a working button', function () {
+  const html = readSource('index.html');
+  Object.keys(SAMPLES).forEach(function (key) {
+    const dataset = SAMPLES[key];
+    assert(dataset.buttonId, key + ' should declare a buttonId');
+    assertIncludes(html, 'id="' + dataset.buttonId + '"', 'the button for ' + key + ' must exist in index.html');
+    assert(dataset.label && dataset.summary && dataset.expectation, key + ' should describe itself for the user');
+  });
+});
+
+test('every dataset parses cleanly, with nothing skipped and no warnings', function () {
+  Object.keys(SAMPLES).forEach(function (key) {
+    const result = parseSample(SAMPLES[key].csv);
+    assertEqual(result.stats.skipped, 0, key + ' should have no skipped rows');
+    assertEqual(result.warnings.length, 0,
+      key + ' should produce no warnings, but produced: ' + codesOf(result.warnings).join(', '));
+    assertEqual(result.stats.timelineReliable, true, key + ' should have a trustworthy timeline');
+  });
+});
+
+test('the .csv files also work when uploaded by hand', function () {
+  Object.keys(SAMPLES).forEach(function (key) {
+    const dataset = SAMPLES[key];
+    const fromDisk = Core.parse(fs.readFileSync(path.join(root, 'samples', dataset.file), 'utf8'));
+    const embedded = Core.parse(dataset.csv);
+    assertEqual(fromDisk.stats.events, embedded.stats.events,
+      dataset.file + ' should parse to the same number of events either way');
+    assertEqual(fromDisk.delimiter.label, 'comma', dataset.file + ' should be detected as comma separated');
+    assertEqual(fromDisk.delimiter.confident, true, dataset.file + ' separator should be detected with confidence');
+    assertEqual(fromDisk.stats.skipped, 0, dataset.file + ' should not lose rows when uploaded by hand');
+  });
+});
+
+test('the normal dataset contains no high-priority activity', function () {
+  const events = parseSample(SAMPLES.normal.csv).events;
+  assertEqual(countId(events, 1102), 0, 'a normal day must not contain a cleared audit log');
+  assertEqual(countId(events, 4720), 0, 'a normal day must not contain account creation');
+  assertEqual(countId(events, 4726), 0, 'a normal day must not contain account deletion');
+  assertEqual(countId(events, 4732) + countId(events, 4728), 0, 'a normal day must not contain privilege changes');
+  assert(countId(events, 4624) >= 4, 'there should be several successful logons');
+  assert(countId(events, 4688) >= 4, 'there should be process creation events');
+  assertEqual(countId(events, 4625), 2, 'there should be exactly two failures, both below the threshold');
+});
+
+test('the normal dataset has no account anywhere near the failure threshold', function () {
+  const events = parseSample(SAMPLES.normal.csv).events;
+  const failures = events.filter(function (e) { return e.eventId === 4625; });
+
+  // Both failures belong to mgrey, who mistyped a password and then signed in.
+  // NOTE for readers of this test: the FIRST "Account Name" in a 4625 message is
+  // the machine account (WIN10-LAB01$), not the user. Reading the wrong one is
+  // the classic beginner mistake, which is why the engine reads message blocks.
+  assertEqual(messageCount(failures, 4625, 'Account Name: mgrey'), 2, 'both failures should be for mgrey');
+  assertEqual(messageCount(events, 4624, 'Account Name: mgrey'), 2, 'mgrey should have signed in twice');
+  assert(failures.length < 5, 'two failures is far below the default threshold of five');
+});
+
+test('the password guessing dataset contains the pattern the rule will look for', function () {
+  const events = parseSample(SAMPLES.guessing.csv).events;
+  const failures = events.filter(function (e) { return e.eventId === 4625; });
+
+  assertEqual(failures.length, 8, 'there should be eight failures');
+  assertEqual(messageCount(failures, 4625, 'Account Name: jsmith'), 8, 'all eight failures should be for jsmith');
+  assertEqual(countId(events, 4624), 1, 'there should be exactly one success');
+
+  const success = events.filter(function (e) { return e.eventId === 4624; })[0];
+  assertIncludes(success.message, 'Account Name: jsmith', 'the success should be for the same account');
+  assertIncludes(success.message, '203.0.113.44', 'the success should come from the same address as the failures');
+  assert(success.timestamp.ms > failures[failures.length - 1].timestamp.ms, 'the success should come after the failures');
+
+  const span = success.timestamp.ms - failures[0].timestamp.ms;
+  assert(span < 10 * 60 * 1000,
+    'all attempts should fit inside the default ten minute window, but they span ' + Math.round(span / 1000) + ' seconds');
+});
+
+test('the persistence dataset contains creation followed by a privileged group change', function () {
+  const events = parseSample(SAMPLES.persistence.csv).events;
+  const created = events.filter(function (e) { return e.eventId === 4720; });
+  const added = events.filter(function (e) { return e.eventId === 4732; });
+
+  assertEqual(created.length, 1, 'there should be one account creation');
+  assertEqual(added.length, 1, 'there should be one local group addition');
+  assertIncludes(created[0].message, 'Account Name: temp-admin', 'temp-admin should be the account created');
+  assertIncludes(added[0].message, 'Account Name: temp-admin', 'temp-admin should be the account added');
+  assertIncludes(added[0].message, 'Group Name: Administrators', 'the group should be Administrators');
+  assert(added[0].timestamp.ms > created[0].timestamp.ms, 'the group change should come after the creation');
+  assert(countId(events, 4624) >= 1, 'the new account should be seen being used');
+});
+
+test('the mixed dataset contains every scenario at once', function () {
+  const events = parseSample(SAMPLES.mixed.csv).events;
+  const failures = events.filter(function (e) { return e.eventId === 4625; });
+
+  assert(failures.length >= 5, 'there should be at least five failures');
+  assertEqual(messageCount(failures, 4625, 'Account Name: svc-backup'), failures.length,
+    'every failure should be for svc-backup');
+  assertEqual(countId(events, 1102), 1, 'the log should be cleared once');
+  assertEqual(countId(events, 4720), 1, 'one account should be created');
+  assertEqual(countId(events, 4732), 1, 'one privileged group change should be present');
+  assertEqual(countId(events, 4726), 1, 'one account should be deleted');
+  assertEqual(countId(events, 7045), 1, 'one service installation should be present');
+  assertEqual(countId(events, 4104), 1, 'one PowerShell script block should be present');
+
+  assertIncludes(events.filter(function (e) { return e.eventId === 4104; })[0].message,
+    '-EncodedCommand', 'the script block should show an encoded command');
+  assertIncludes(events.filter(function (e) { return e.eventId === 1102; })[0].message,
+    'Account Name: svc-backup', 'the log clearing should name the account');
+
+  const successes = events.filter(function (e) {
+    return e.eventId === 4624 && e.message.indexOf('Account Name: svc-backup') !== -1;
+  });
+  assertEqual(successes.length, 1, 'svc-backup should have exactly one success');
+  assert(successes[0].timestamp.ms > failures[0].timestamp.ms, 'the success should come after the failures');
+});
+
+test('no demo dataset uses a real-world IP address', function () {
+  Object.keys(SAMPLES).forEach(function (key) {
+    const found = Array.from(SAMPLES[key].csv.matchAll(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g)).map(function (m) { return m[0]; });
+    assert(found.length > 0, key + ' should contain at least one address to be realistic');
+    found.forEach(function (address) {
+      const parts = address.split('.').map(Number);
+      const isPrivate = parts[0] === 10
+        || (parts[0] === 192 && parts[1] === 168)
+        || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
+      const isDocumentation = (parts[0] === 203 && parts[1] === 0 && parts[2] === 113)
+        || (parts[0] === 198 && parts[1] === 51 && parts[2] === 100);
+      assert(isPrivate || isDocumentation, address + ' in ' + key + ' is not a private or documentation address');
+    });
+  });
+});
+
 
 /* --------------------------------------------------------------------------
    Summary

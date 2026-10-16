@@ -88,7 +88,7 @@
       'meta-delimiter', 'meta-encoding', 'btn-reset', 'status-region', 'error-region',
       'parse-panel', 'stat-events', 'stat-rows', 'stat-skipped', 'stat-columns',
       'stat-missing', 'stat-range', 'detected-columns', 'missing-columns', 'missing-note',
-      'warning-region', 'warning-list', 'preview-body', 'demo-chip', 'demo-hint',
+      'warning-region', 'warning-list', 'preview-body', 'demo-chip', 'demo-hint', 'demo-info',
       'footer-version',
       'btn-sample-normal', 'btn-sample-guessing', 'btn-sample-privilege', 'btn-sample-mixed'
     ].forEach(function (id) {
@@ -212,6 +212,13 @@
     state.fileSize = meta.size;
     state.isDemo = !!meta.isDemo;
 
+    // The "Demo Data" label must be visible whenever the data is not the user's
+    // own. It is shown here rather than only in the demo bar, so it stays on
+    // screen while the user scrolls through the results.
+    setHidden(dom['demo-chip'], !state.isDemo);
+    if (meta.dataset) showDemoInfo(meta.dataset);
+    else hideDemoInfo();
+
     if (!result || !result.ok) {
       renderParseFailure(result);
       return;
@@ -224,7 +231,9 @@
     const count = result.stats ? result.stats.events : 0;
     const warningCount = result.warnings.length;
     setStatus(warningCount ? 'warn' : 'ok',
-      'Parsed ' + plural(count, 'event') + ' from ' + meta.name + ' locally in your browser.'
+      'Parsed ' + plural(count, 'event') + ' from ' + meta.name
+      + (state.isDemo ? ' (Demo Data - fictional, built into the app)' : '')
+      + ' locally in your browser.'
       + (warningCount ? ' ' + plural(warningCount, 'note') + ' about this file - see below.' : ''));
   }
 
@@ -434,6 +443,9 @@
     clear(dom['missing-columns']);
     clear(dom['warning-list']);
     if (dom['missing-note']) setHidden(dom['missing-note'], true);
+    // Clear the demo labelling too, so the page never claims stale demo data.
+    setHidden(dom['demo-chip'], true);
+    hideDemoInfo();
     setStatus(null, 'No file loaded yet. Everything stays in your browser.');
   }
 
@@ -489,8 +501,109 @@
   }
 
   /* ------------------------------------------------------------------------
-   * Start
-   * ------------------------------------------------------------------------ */
+   * Demo datasets ("test mode")
+   * ------------------------------------------------------------------------
+   * The four datasets live in samples/sample-data.js, which index.html loads as
+   * an ordinary script. That is precisely why the demo buttons work when the
+   * page is opened by double-clicking index.html: nothing has to be fetched,
+   * because browsers block a file:// page from reading other local files.
+   *
+   * The .csv files in samples/ contain exactly the same text, for students who
+   * want to practise the real upload path. A test fails the build if the two
+   * ever disagree.
+   */
+  function demoData() {
+    if (typeof window !== 'undefined' && window.TRIAGE_SAMPLE_DATA) return window.TRIAGE_SAMPLE_DATA;
+    return null;
+  }
+
+  function loadDataset(key) {
+    const data = demoData();
+    if (!data || !data[key]) {
+      showError('That demo dataset is not available.',
+        'The file samples/sample-data.js did not load, so the built-in demo data is missing.',
+        'Check that sample-data.js is in the samples folder next to index.html, then refresh this page.');
+      setStatus('error', 'Nothing was analysed.');
+      return;
+    }
+
+    const dataset = data[key];
+    clearError();
+    setStatus('busy', 'Loading the demo dataset "' + dataset.label + '" in your browser...');
+
+    let result;
+    try {
+      result = Core.parse(dataset.csv, { keepRaw: false });
+    } catch (err) {
+      showError('The demo dataset could not be read.',
+        'This would be a bug in the tool rather than something you did.',
+        'Please report it, with the dataset name: ' + dataset.label);
+      setStatus('error', 'Nothing was analysed.');
+      return;
+    }
+
+    // Clear the file picker, so uploading the matching .csv file afterwards
+    // still triggers a change event.
+    if (dom['file-input']) dom['file-input'].value = '';
+
+    handleParseResult(result, {
+      name: dataset.file,
+      size: 0,
+      isDemo: true,
+      dataset: dataset
+    });
+
+    // Move the user to the results without stealing focus from the button.
+    if (dom['parse-panel'] && typeof dom['parse-panel'].scrollIntoView === 'function') {
+      dom['parse-panel'].scrollIntoView({ block: 'start' });
+    }
+  }
+
+  function showDemoInfo(dataset) {
+    const box = dom['demo-info'];
+    if (!box) return;
+    clear(box);
+
+    const headline = el('p', 'demo-info__line');
+    headline.appendChild(el('strong', null, 'Demo Data: '));
+    headline.appendChild(el('span', null, dataset.label));
+    box.appendChild(headline);
+
+    box.appendChild(el('p', 'demo-info__line', dataset.summary));
+    box.appendChild(el('p', 'demo-info__line demo-info__expect',
+      'What this scenario is designed to show: ' + dataset.expectation));
+
+    setHidden(box, false);
+  }
+
+  function hideDemoInfo() {
+    const box = dom['demo-info'];
+    if (!box) return;
+    clear(box);
+    setHidden(box, true);
+  }
+
+  /**
+   * Turns the four demo buttons on. They are disabled in the HTML so that the
+   * page never offers a button that does nothing if sample-data.js is missing.
+   */
+  function bindDemoButtons() {
+    const data = demoData();
+    if (!data) return 0;
+
+    let wired = 0;
+    Object.keys(data).forEach(function (key) {
+      const dataset = data[key];
+      const button = dataset && dataset.buttonId ? $(dataset.buttonId) : null;
+      if (!button) return;
+      button.disabled = false;
+      button.removeAttribute('title');
+      button.addEventListener('click', function () { loadDataset(key); });
+      wired++;
+    });
+    return wired;
+  }
+
   function init() {
     cacheDom();
     bindUpload();
@@ -504,9 +617,15 @@
         + ' - educational SOC triage tool. Findings are a reason to investigate, not proof.';
     }
 
-    // The demo buttons are wired up in the next build step, when the sample
-    // datasets are added to samples/. Until then they stay disabled, so the page
-    // never offers something that does not work.
+    // Turn on the demo buttons. If samples/sample-data.js is missing they stay
+    // disabled and the note below says why, instead of failing silently.
+    const wired = bindDemoButtons();
+    if (dom['demo-hint']) {
+      dom['demo-hint'].textContent = wired
+        ? 'These four datasets are fictional and safe to use in presentations. Loading one changes nothing on your computer.'
+        : 'The demo datasets could not be loaded, so these buttons are unavailable. Check that samples/sample-data.js exists next to index.html.';
+    }
+
     setStatus(null, 'No file loaded yet. Nothing you load here leaves your browser.');
   }
 

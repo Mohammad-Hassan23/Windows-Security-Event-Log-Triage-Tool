@@ -285,8 +285,16 @@
    * ------------------------------------------------------------------------
    * Event Viewer may write comma separated values; a non-English Windows often
    * writes semicolons; the "Text (Tab delimited)" export writes tabs. Rather
-   * than force the user to choose, we count candidates on the first few lines
-   * while ignoring any character inside quotes.
+   * than make the user choose, we test each candidate separator properly.
+   *
+   * HOW THIS WORKS, AND WHY IT IS NOT JUST COUNTING CHARACTERS
+   * An earlier version counted separator characters on the first few physical
+   * lines. That produced a false alarm on every realistic file, because a
+   * Windows event Message is quoted text spanning several lines - the lines
+   * inside it contain no commas at all, so the counts disagreed and the tool
+   * claimed it was unsure. The correct approach is to actually parse the start
+   * of the file with each candidate and see which one yields a consistent
+   * number of columns per record.
    */
   const DELIMITERS = [
     { char: ',', label: 'comma' },
@@ -295,54 +303,41 @@
     { char: '|', label: 'pipe' }
   ];
 
-  function countOutsideQuotes(line, character) {
-    let count = 0;
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQuotes = !inQuotes; continue; }
-      if (!inQuotes && ch === character) count++;
-    }
-    return count;
-  }
-
   function detectDelimiter(text) {
-    const lines = String(text || '').split(/\r?\n/).slice(0, 5).filter(function (l) {
-      return l.trim() !== '';
-    });
-    if (!lines.length) return { char: ',', label: 'comma', confident: false, counts: {} };
+    const sample = String(text || '').slice(0, 20000);
+    if (!sample.trim()) return { char: ',', label: 'comma', confident: false, counts: {} };
 
-    let best = null;
     const counts = {};
+    let best = null;
 
     DELIMITERS.forEach(function (candidate) {
-      let total = 0;
-      let consistent = true;
-      let previous = null;
+      const parsed = parseDelimited(sample, candidate.char);
+      const columns = parsed.rows.slice(0, 5).map(function (record) { return record.cells.length; });
+      const fields = columns.length ? columns[0] : 0;
+      counts[candidate.label] = fields;
 
-      lines.forEach(function (line) {
-        const count = countOutsideQuotes(line, candidate.char);
-        if (previous === null) previous = count;
-        else if (count !== previous) consistent = false;
-        total += count;
-      });
+      // A usable separator produces more than one column, and every record it
+      // reads should have the same shape.
+      if (fields <= 1) return;
 
-      const firstLine = countOutsideQuotes(lines[0], candidate.char);
-      counts[candidate.label] = firstLine;
-      if (firstLine <= 0) return;
-
-      const scored = {
+      const consistent = columns.every(function (count) { return count === fields; });
+      const score = {
         char: candidate.char,
         label: candidate.label,
-        total: total,
+        fields: fields,
         consistent: consistent,
         confident: consistent
       };
 
-      if (!best || scored.total > best.total ||
-          (scored.total === best.total && scored.consistent && !best.consistent)) {
-        best = scored;
+      if (!best) { best = score; return; }
+      // Prefer a separator that gives a consistent shape, then the one that
+      // finds more columns (a comma file read as tab-separated would give one
+      // column; a tab file read as comma-separated likewise).
+      if (score.consistent !== best.consistent) {
+        if (score.consistent) best = score;
+        return;
       }
+      if (score.fields > best.fields) best = score;
     });
 
     if (!best) return { char: ',', label: 'comma', confident: false, counts: counts };

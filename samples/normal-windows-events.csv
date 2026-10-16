@@ -1,0 +1,199 @@
+Level,Date and Time,Source,Event ID,Task Category,User,Computer,Keywords,Message
+Information,2026-04-06T08:41:12,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\jsmith,WIN10-LAB01,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB01$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: jsmith
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: WIN10-LAB01
+ Source Network Address: 192.168.10.25
+ Source Port: 0"
+Information,2026-04-06T08:42:03,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\jsmith,WIN10-LAB01,Audit Success,"A new process has been created.
+
+New Process Name: C:\Windows\explorer.exe
+ Creator Process Name: C:\Windows\System32\userinit.exe
+ Process Command Line: explorer.exe
+
+Subject:
+ Account Name: jsmith
+ Account Domain: LAB"
+Information,2026-04-06T08:42:44,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\jsmith,WIN10-LAB01,Audit Success,"A new process has been created.
+
+New Process Name: C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE
+ Creator Process Name: C:\Windows\explorer.exe
+ Process Command Line: ""OUTLOOK.EXE""
+
+Subject:
+ Account Name: jsmith
+ Account Domain: LAB"
+Information,2026-04-06T08:45:19,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\mgrey,WIN10-LAB02,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB02$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: mgrey
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: WIN10-LAB02
+ Source Network Address: 192.168.10.31
+ Source Port: 0"
+Information,2026-04-06T08:52:41,Microsoft-Windows-Security-Auditing,4625,Logon,-,WIN10-LAB02,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB02$
+
+Logon Type: 2
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: mgrey
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: WIN10-LAB02
+ Source Network Address: 192.168.10.31"
+Information,2026-04-06T08:52:58,Microsoft-Windows-Security-Auditing,4625,Logon,-,WIN10-LAB02,Audit Failure,"An account failed to log on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB02$
+
+Logon Type: 2
+
+Account For Which Logon Failed:
+ Security ID: NULL SID
+ Account Name: mgrey
+ Account Domain: LAB
+
+Failure Information:
+ Failure Reason: Unknown user name or bad password.
+ Status: 0xC000006D
+ Sub Status: 0xC000006A
+
+Network Information:
+ Workstation Name: WIN10-LAB02
+ Source Network Address: 192.168.10.31"
+Information,2026-04-06T08:53:20,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\mgrey,WIN10-LAB02,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB02$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: mgrey
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: WIN10-LAB02
+ Source Network Address: 192.168.10.31
+ Source Port: 0"
+Information,2026-04-06T09:05:11,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\bpatel,WIN10-LAB03,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB03$
+
+Logon Information:
+ Logon Type: 2
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: bpatel
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: WIN10-LAB03
+ Source Network Address: 192.168.10.44
+ Source Port: 0"
+Information,2026-04-06T09:06:00,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\bpatel,WIN10-LAB03,Audit Success,"A new process has been created.
+
+New Process Name: C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE
+ Creator Process Name: C:\Windows\explorer.exe
+ Process Command Line: ""WINWORD.EXE"" report.docx
+
+Subject:
+ Account Name: bpatel
+ Account Domain: LAB"
+Information,2026-04-06T09:30:22,Microsoft-Windows-Security-Auditing,4624,Logon,LAB\labadmin,WIN10-LAB01,Audit Success,"An account was successfully logged on.
+
+Subject:
+ Security ID: S-1-5-18
+ Account Name: WIN10-LAB01$
+
+Logon Information:
+ Logon Type: 10
+
+New Logon:
+ Security ID: S-1-5-21-1111111111-2222222222-3333333333-1105
+ Account Name: labadmin
+ Account Domain: LAB
+
+Network Information:
+ Workstation Name: ADMIN-PC
+ Source Network Address: 192.168.10.5
+ Source Port: 0"
+Information,2026-04-06T09:31:05,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\labadmin,WIN10-LAB01,Audit Success,"A new process has been created.
+
+New Process Name: C:\Windows\System32\robocopy.exe
+ Creator Process Name: C:\Windows\System32\cmd.exe
+ Process Command Line: robocopy \\FILESRV\backup D:\backup /MIR
+
+Subject:
+ Account Name: labadmin
+ Account Domain: LAB"
+Information,2026-04-06T10:15:33,Microsoft-Windows-Security-Auditing,4688,Process Creation,LAB\bpatel,WIN10-LAB03,Audit Success,"A new process has been created.
+
+New Process Name: C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE
+ Creator Process Name: C:\Windows\explorer.exe
+ Process Command Line: ""EXCEL.EXE"" budget.xlsx
+
+Subject:
+ Account Name: bpatel
+ Account Domain: LAB"
+Information,2026-04-06T17:14:52,Microsoft-Windows-Security-Auditing,4634,Logoff,LAB\jsmith,WIN10-LAB01,Audit Success,"An account was logged off.
+
+Subject:
+ Account Name: jsmith
+ Account Domain: LAB
+
+Logon Type: 2"
+Information,2026-04-06T17:15:10,Microsoft-Windows-Security-Auditing,4634,Logoff,LAB\mgrey,WIN10-LAB02,Audit Success,"An account was logged off.
+
+Subject:
+ Account Name: mgrey
+ Account Domain: LAB
+
+Logon Type: 2"
+Information,2026-04-06T17:15:31,Microsoft-Windows-Security-Auditing,4634,Logoff,LAB\bpatel,WIN10-LAB03,Audit Success,"An account was logged off.
+
+Subject:
+ Account Name: bpatel
+ Account Domain: LAB
+
+Logon Type: 2"
