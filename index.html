@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<!--
+  PRIVACY / SECURITY NOTE FOR ANYONE READING THIS FILE
+  -------------------------------------------------------------------------
+  This application is a set of static files. There is no server, no database
+  and no API. The Content-Security-Policy below is crafted to make outbound
+  network traffic impossible even by accident:
+
+    connect-src 'none'  -> blocks fetch(), XMLHttpRequest, WebSocket, sendBeacon
+    img-src 'self' data -> blocks "tracking pixel" style data exfiltration
+    form-action 'none'  -> blocks form submission to anywhere
+    object/frame/base-uri 'none' -> blocks plugin, iframe and <base> tricks
+
+  We intentionally do NOT set `default-src 'none'; script-src 'self'` here,
+  because some browsers refuse to load local scripts from a file:// URL when
+  `script-src 'self'` is present, which would break opening index.html by
+  double-clicking it. README.md documents the stricter policy to use if you
+  host this as a website instead.
+-->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'; manifest-src 'none'">
+<title>Security Log Triage Lab - Windows Security Event Log Triage Tool</title>
+<meta name="description" content="Educational, offline, browser-based triage tool for Windows Security event logs exported to CSV. Files never leave your computer.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- =====================================================================
+     Header
+     ===================================================================== -->
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true">SLT</span>
+      <div class="brand__text">
+        <p class="brand__name">Security Log Triage Lab</p>
+        <p class="brand__subtitle">Windows Security Event Log Triage Tool</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge--calm">Educational</span>
+      <span class="badge badge--calm">100% offline</span>
+    </div>
+  </div>
+</header>
+
+<!-- =====================================================================
+     Privacy notice (required, deliberately prominent)
+     ===================================================================== -->
+<section class="privacy-banner" aria-labelledby="privacy-heading">
+  <div class="wrap privacy-banner__inner">
+    <span class="privacy-banner__icon" aria-hidden="true">&#128274;</span>
+    <div>
+      <h2 class="privacy-banner__heading" id="privacy-heading">Privacy: your data never leaves this browser</h2>
+      <p class="privacy-banner__text">
+        <strong>Your Windows security logs are analysed locally in your browser. Files are not uploaded or transmitted anywhere.</strong>
+      </p>
+      <p class="privacy-banner__note">
+        There is no server, no analytics, no tracking, no cookies and no external API in this tool.
+        Your event logs are held in memory only and disappear when you close or refresh the tab.
+      </p>
+    </div>
+  </div>
+</section>
+
+<main id="main" class="wrap main">
+
+  <!-- ===================================================================
+       Disclaimer (required)
+       =================================================================== -->
+  <section class="notice notice--disclaimer" aria-labelledby="disclaimer-heading">
+    <h2 class="notice__heading" id="disclaimer-heading">Disclaimer</h2>
+    <p>
+      <strong>Educational SOC triage tool. Findings indicate activity that may deserve investigation and do not prove malicious behaviour.</strong>
+    </p>
+    <p>Only analyse logs from systems you own or are authorised to investigate.</p>
+  </section>
+
+  <!-- ===================================================================
+       1. How to get the data out of Windows
+       =================================================================== -->
+  <section class="panel" aria-labelledby="howto-heading">
+    <h2 class="panel__heading" id="howto-heading">
+      <span aria-hidden="true">&#128196;</span> Step 1 &mdash; Export your Windows Security events
+    </h2>
+    <p class="panel__lede">
+      This tool reads <strong>CSV or delimited text exports</strong> of Windows event logs.
+      It does <strong>not</strong> read raw <code>.evtx</code> files in this version.
+    </p>
+
+    <details class="howto" open>
+      <summary class="howto__summary">Option A &mdash; Windows Event Viewer (point and click)</summary>
+      <ol class="howto__steps">
+        <li>Open <strong>Event Viewer</strong> (press <kbd>Win</kbd> + <kbd>R</kbd>, type <code>eventvwr.msc</code>, press Enter).</li>
+        <li>In the left pane expand <strong>Windows Logs</strong>, then click <strong>Security</strong>.</li>
+        <li>Optional: use <strong>Filter Current Log&hellip;</strong> on the right to narrow the events, for example Event IDs <code>4624,4625,4720,4726,4728,4732,1102</code>.</li>
+        <li>On the right, click <strong>Save All Events As&hellip;</strong> (or <strong>Save Filtered Log File As&hellip;</strong>).</li>
+        <li>Choose <strong>Comma Separated Values (*.csv)</strong> if your build offers it. If it only offers <strong>Text (Tab delimited) (*.txt)</strong>, that is fine &mdash; this tool auto-detects tab-separated files too.</li>
+        <li>Upload the saved file below. Do not open and re-save it in Excel first: Excel can damage the quoting and reformat the timestamps.</li>
+      </ol>
+      <p class="howto__hint">
+        Honest note: not every Windows 10/11 build shows a CSV option in that dialog. If yours does
+        not, use Option B, which always works.
+      </p>
+    </details>
+
+    <details class="howto">
+      <summary class="howto__summary">Option B &mdash; PowerShell (most reliable, recommended)</summary>
+      <p class="howto__hint">
+        Run an <strong>elevated</strong> PowerShell (right-click &rarr; <em>Run as Administrator</em>), because
+        reading the Security log requires administrator rights.
+      </p>
+      <pre class="code-block" tabindex="0" role="region" aria-label="PowerShell command to export Windows Security events to CSV"><code># Export selected Windows Security events to CSV for triage practice.
+# Run in an ELEVATED PowerShell window. Change the output path if you like.
+$ids = 4624,4625,4720,4726,4728,4732,1102,4688
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
+  Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, TaskDisplayName,
+                KeywordsDisplayNames, Message |
+  Export-Csv -Path "$env:USERPROFILE\Desktop\security-triage.csv" -NoTypeInformation -Encoding UTF8</code></pre>
+      <p class="howto__hint">
+        Tip: add <code>; StartTime=(Get-Date).AddDays(-1)</code> inside the filter hashtable to export
+        only the last day, and keep test exports small while you are learning.
+      </p>
+    </details>
+
+    <details class="howto">
+      <summary class="howto__summary">Option C &mdash; No Windows machine? Use the demo data</summary>
+      <p class="howto__hint">
+        The demo buttons under the upload box load fictional sample logs written for teaching. They are
+        clearly labelled <strong>Demo Data</strong> and are safe to use in presentations and practice.
+      </p>
+    </details>
+  </section>
+
+  <!-- ===================================================================
+       2. Upload
+       =================================================================== -->
+  <section class="panel" aria-labelledby="upload-heading">
+    <h2 class="panel__heading" id="upload-heading">
+      <span aria-hidden="true">&#128193;</span> Step 2 &mdash; Upload your exported event log
+    </h2>
+    <p class="panel__lede">
+      Your Windows event logs are analysed locally in your browser and are not uploaded anywhere.
+    </p>
+
+    <div class="upload">
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" class="sr-only"
+               accept=".csv,.txt,.tsv,.log,text/csv,text/plain">
+        <label for="file-input" class="drop-zone__label">
+          <span class="drop-zone__icon" aria-hidden="true">&#8682;</span>
+          <span class="drop-zone__title">Choose a CSV file, or drag and drop it here</span>
+          <span class="drop-zone__hint">
+            Comma, semicolon or tab separated &middot; .csv / .txt / .tsv &middot; up to 25 MB
+          </span>
+          <span class="btn btn--primary">Browse for a file&hellip;</span>
+        </label>
+      </div>
+
+      <p class="upload__privacy">
+        <span aria-hidden="true">&#128274;</span>
+        Files are read by your own browser. They are never uploaded, transmitted or saved anywhere.
+      </p>
+    </div>
+
+    <!-- Loaded-file metadata -->
+    <div class="upload__meta" id="file-meta" hidden>
+      <dl class="meta-grid">
+        <div><dt>File</dt><dd id="meta-filename">&mdash;</dd></div>
+        <div><dt>Size</dt><dd id="meta-filesize">&mdash;</dd></div>
+        <div><dt>Detected format</dt><dd id="meta-delimiter">&mdash;</dd></div>
+        <div><dt>Encoding</dt><dd id="meta-encoding">&mdash;</dd></div>
+      </dl>
+      <button type="button" class="btn btn--ghost" id="btn-reset">Clear loaded data</button>
+    </div>
+
+    <!-- Live status: polite, so a screen reader is not interrupted mid-sentence -->
+    <p class="status" id="status-region" role="status" aria-live="polite">No file loaded yet.</p>
+
+    <!-- Hard errors: assertive, because the user has to act on them -->
+    <div class="error-box" id="error-region" role="alert" hidden></div>
+
+    <div class="demo-bar" aria-labelledby="demo-heading">
+      <div class="demo-bar__head">
+        <h3 class="demo-bar__heading" id="demo-heading">Test mode</h3>
+        <span class="badge badge--demo" id="demo-chip" hidden>Demo Data</span>
+      </div>
+      <p class="demo-bar__note">
+        Fictional teaching data &mdash; invented users, computers and private (RFC 1918) IP addresses only.
+      </p>
+      <div class="demo-bar__buttons" role="group" aria-label="Load demo datasets">
+        <button type="button" class="btn btn--ghost" id="btn-sample-normal" disabled>Load Normal Sample</button>
+        <button type="button" class="btn btn--ghost" id="btn-sample-guessing" disabled>Load Password Guessing Sample</button>
+        <button type="button" class="btn btn--ghost" id="btn-sample-privilege" disabled>Load Privilege Escalation Sample</button>
+        <button type="button" class="btn btn--ghost" id="btn-sample-mixed" disabled>Load Mixed SOC Sample</button>
+      </div>
+      <p class="demo-bar__hint" id="demo-hint">
+        Demo datasets are wired up in the next build step.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       Parse check
+       =================================================================== -->
+  <section class="panel" id="parse-panel" hidden aria-labelledby="parse-heading">
+    <h2 class="panel__heading" id="parse-heading">
+      <span aria-hidden="true">&#9989;</span> Parse check
+    </h2>
+    <p class="panel__lede">
+      What the tool understood from your file, before any analysis happens.
+    </p>
+
+    <div class="grid grid--stats">
+      <div class="stat stat--accent"><span class="stat__value" id="stat-events">0</span><span class="stat__label">Events parsed</span></div>
+      <div class="stat"><span class="stat__value" id="stat-rows">0</span><span class="stat__label">Data rows read</span></div>
+      <div class="stat"><span class="stat__value" id="stat-skipped">0</span><span class="stat__label">Rows skipped</span></div>
+      <div class="stat"><span class="stat__value" id="stat-columns">0</span><span class="stat__label">Columns recognised</span></div>
+      <div class="stat"><span class="stat__value" id="stat-missing">0</span><span class="stat__label">Fields not found</span></div>
+      <div class="stat"><span class="stat__value" id="stat-range">&mdash;</span><span class="stat__label">Time range</span></div>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <h3 class="card__heading">Columns understood</h3>
+        <ul class="col-list" id="detected-columns"></ul>
+      </div>
+      <div class="card">
+        <h3 class="card__heading">Columns not found</h3>
+        <ul class="col-list col-list--missing" id="missing-columns"></ul>
+        <p class="card__note" id="missing-note" hidden></p>
+      </div>
+    </div>
+
+    <div class="notice notice--warn" id="warning-region" hidden aria-labelledby="warning-heading">
+      <h3 class="notice__heading" id="warning-heading">Notes about this file</h3>
+      <ul id="warning-list"></ul>
+    </div>
+
+    <details class="howto" open>
+      <summary class="howto__summary">Preview: the first rows as the tool understood them</summary>
+      <div class="table-scroll">
+        <table class="data-table">
+          <caption>First rows parsed from the loaded file</caption>
+          <thead>
+            <tr>
+              <th scope="col">Line</th>
+              <th scope="col">Date / Time</th>
+              <th scope="col">Event ID</th>
+              <th scope="col">Level</th>
+              <th scope="col">Account</th>
+              <th scope="col">Computer</th>
+              <th scope="col">Message (shortened)</th>
+            </tr>
+          </thead>
+          <tbody id="preview-body"></tbody>
+        </table>
+      </div>
+      <p class="howto__hint">
+        If something looks wrong here, the problem is usually the export rather than the analysis.
+      </p>
+    </details>
+  </section>
+
+  <!-- ===================================================================
+       How to think like a SOC analyst (required educational section)
+       =================================================================== -->
+  <section class="panel" aria-labelledby="soc-heading">
+    <h2 class="panel__heading" id="soc-heading">
+      <span aria-hidden="true">&#129504;</span> How to Think Like a SOC Analyst
+    </h2>
+    <p class="panel__lede">
+      A Security Operations Centre (SOC) is the team that watches an organisation's
+      systems for suspicious activity. "Triage" is the first, fastest pass: deciding which
+      alerts deserve a human's attention, and in what order. This is the workflow they follow.
+    </p>
+
+    <ol class="workflow">
+      <li><strong>Identify the event.</strong> What is it? Event ID 4625 means a logon attempt failed.</li>
+      <li><strong>Understand what happened.</strong> Read the details: which account, from where, at what time.</li>
+      <li><strong>Identify the affected user or system.</strong> Is this an ordinary user, an administrator, a service account, or a machine account?</li>
+      <li><strong>Decide whether the activity is expected.</strong> Is it normal for this account, this hour, this device? You often cannot know from the log alone &mdash; so say so, rather than guessing.</li>
+      <li><strong>Look for related events.</strong> Was there a logoff, a new process, a privilege change around the same time?</li>
+      <li><strong>Correlate authentication and privilege activity.</strong> Failed logons that are followed by a success tell a different story than failures on their own.</li>
+      <li><strong>Gather additional evidence.</strong> Endpoint logs, VPN records, badge access, ticket history, the user themselves.</li>
+      <li><strong>Decide whether escalation is required.</strong> Document what you saw, what you ruled out, and what remains open.</li>
+    </ol>
+
+    <div class="key-quote">
+      <p>"One security event rarely tells the entire story. Analysts build context by correlating multiple events."</p>
+      <p>"A detection is a reason to investigate, not proof that an attacker is present."</p>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       Beginner Event ID reference (required educational section)
+       =================================================================== -->
+  <section class="panel" aria-labelledby="ref-heading">
+    <h2 class="panel__heading" id="ref-heading">
+      <span aria-hidden="true">&#128218;</span> Windows Event ID reference for beginners
+    </h2>
+    <p class="panel__lede">
+      Windows has thousands of Event IDs. These are the ten worth knowing first for
+      authentication, account and privilege activity. All of them are explained in plain
+      English, and none of them proves that anything bad has happened.
+    </p>
+    <div class="table-scroll">
+      <table class="ref-table">
+        <caption class="sr-only">Windows Event IDs supported by this tool, with plain-English explanations</caption>
+        <thead>
+          <tr>
+            <th scope="col">Event ID</th>
+            <th scope="col">What it records</th>
+            <th scope="col">Why an analyst cares</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ref-id">4624</td>
+            <td>Successful logon</td>
+            <td>Context, not a warning. It matters when it follows a burst of failures, or happens on a machine or account that should not be logging in.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4625</td>
+            <td>Failed logon</td>
+            <td>One is routine. A pattern is interesting: a wrong password, a stale service credential, or somebody guessing.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4688</td>
+            <td>Process created</td>
+            <td>Shows what ran. Only recorded if process-creation auditing is switched on, so absence proves nothing.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4720</td>
+            <td>User account created</td>
+            <td>Normal for administrators. Worth verifying, because attackers also create accounts to keep access.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4726</td>
+            <td>User account deleted</td>
+            <td>Usually tidy administration; occasionally a sign of somebody covering their tracks.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4728</td>
+            <td>Member added to a global security group</td>
+            <td>Becomes important when the group is privileged, such as Domain Admins.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4732</td>
+            <td>Member added to a local security group</td>
+            <td>The same idea locally &mdash; for example adding an account to local Administrators.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">1102</td>
+            <td>Security audit log cleared</td>
+            <td>Can be legitimate maintenance, but it also removes evidence, so it is normally investigated.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">4104</td>
+            <td>PowerShell script block logging</td>
+            <td>Visibility into PowerShell commands, which is genuinely useful for both admins and attackers.</td>
+          </tr>
+          <tr>
+            <td class="ref-id">7045</td>
+            <td>Service installed</td>
+            <td>Often ordinary software installation; also a classic way to make malware start automatically.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       Honest limitations
+       =================================================================== -->
+  <section class="panel" aria-labelledby="limits-heading">
+    <h2 class="panel__heading" id="limits-heading">
+      <span aria-hidden="true">&#9888;</span> What this tool cannot do
+    </h2>
+    <p class="panel__lede">
+      Knowing the limits of a tool is part of being a good analyst. This is a learning
+      aid, not a security product.
+    </p>
+    <ul class="limits-list">
+      <li><strong>An event is not proof.</strong> Every finding here is a reason to look further, never a verdict.</li>
+      <li><strong>Absence of evidence is not evidence of absence.</strong> If process-creation or PowerShell auditing was switched off, those events simply do not exist in the export.</li>
+      <li><strong>CSV exports differ between machines.</strong> Column names, date formats and encodings vary with Windows version and regional settings.</li>
+      <li><strong>Not every event carries a source IP.</strong> Local and console logons legitimately have none.</li>
+      <li><strong>No baselining.</strong> The tool cannot know whether a login is normal <em>for you</em>; only a human with context can decide that.</li>
+      <li><strong>No cross-system correlation.</strong> It sees only the file you give it, so it cannot link activity across several computers.</li>
+      <li><strong>Timestamps can be ambiguous.</strong> Where a file does not make day/month order clear, the tool says so and disables time-window rules rather than guessing.</li>
+      <li><strong>It is not an EDR, SIEM or SOC platform</strong>, and does not replace one.</li>
+    </ul>
+  </section>
+
+</main>
+
+<!-- =====================================================================
+     Footer
+     ===================================================================== -->
+<footer class="site-footer">
+  <div class="wrap site-footer__inner">
+    <p><strong>Security Log Triage Lab</strong> &mdash; Windows Security Event Log Triage Tool</p>
+    <p>
+      Your Windows security logs are analysed locally in your browser. Files are not uploaded or
+      transmitted anywhere. No analytics, no tracking, no cookies, no external API.
+    </p>
+    <p>
+      Educational SOC triage tool. Findings indicate activity that may deserve investigation and do
+      not prove malicious behaviour. Only analyse logs from systems you own or are authorised to investigate.
+    </p>
+    <p id="footer-version">Version 1.0.0 &middot; build step 1: interface and CSV parser</p>
+  </div>
+</footer>
+
+<!--
+  Classic scripts, loaded in order. Deliberately NOT ES modules, because
+  <script type="module"> is blocked by browsers when the page is opened from a
+  file:// path, which would break the "just double-click index.html" workflow.
+-->
+<script src="triage-core.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>

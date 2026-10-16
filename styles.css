@@ -1,0 +1,668 @@
+/* ==========================================================================
+   Security Log Triage Lab - stylesheet
+   --------------------------------------------------------------------------
+   Design goals, in priority order:
+     1. Readable on a bad laptop screen in a dim room (dark theme, calm colour).
+     2. Severity must be understandable WITHOUT relying on colour alone.
+     3. Keyboard and screen-reader friendly: visible focus, good contrast.
+   Deliberately avoided: matrix rain, fake terminals, neon green, skulls,
+   animation for its own sake.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design tokens
+   All colours and sizes live here so the theme stays consistent.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg: #0e1420;
+  --bg-soft: #141c2b;
+  --surface: #18212f;
+  --surface-2: #1e2839;
+  --surface-3: #243044;
+  --border: #2c3a51;
+  --border-strong: #3b4c69;
+
+  /* Text */
+  --text: #e8edf5;
+  --text-muted: #a3b0c2;
+  --text-faint: #7d8b9e;
+
+  /* Brand accent: a restrained blue, deliberately not neon */
+  --accent: #4c8dff;
+  --accent-soft: #1d2f4d;
+  --accent-text: #cfe0ff;
+
+  /* Severity palette. Each severity ALWAYS also carries a text label and a
+     symbol in the markup, so meaning survives colour blindness. */
+  --sev-info: #7dd3fc;
+  --sev-info-bg: #10293b;
+  --sev-low: #86efac;
+  --sev-low-bg: #102c1c;
+  --sev-medium: #fcd34d;
+  --sev-medium-bg: #33280c;
+  --sev-high: #fca5a5;
+  --sev-high-bg: #3a1618;
+
+  --ok: #86efac;
+  --ok-bg: #102c1c;
+  --warn: #fcd34d;
+  --warn-bg: #33280c;
+  --danger: #fca5a5;
+  --danger-bg: #3a1618;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --gap: 1rem;
+  --wrap: 1160px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", "Liberation Mono", Menlo, monospace;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .18);
+}
+
+/* --------------------------------------------------------------------------
+   2. Base / reset
+   -------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.55;
+  /* A very subtle vertical gradient - no animation, no noise texture. */
+  background-image: linear-gradient(180deg, #101827 0%, var(--bg) 340px);
+  background-repeat: no-repeat;
+}
+
+h1, h2, h3, h4 { line-height: 1.25; margin: 0 0 .5rem; font-weight: 650; }
+p { margin: 0 0 .75rem; }
+p:last-child { margin-bottom: 0; }
+ul, ol { margin: 0 0 .75rem; padding-left: 1.35rem; }
+li { margin-bottom: .3rem; }
+
+a { color: var(--accent-text); }
+a:hover { color: #fff; }
+
+code, kbd, pre { font-family: var(--mono); font-size: .9em; }
+
+code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .1em .35em;
+  color: var(--accent-text);
+}
+
+kbd {
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: .1em .4em;
+  font-size: .8em;
+}
+
+/* --------------------------------------------------------------------------
+   3. Accessibility helpers
+   -------------------------------------------------------------------------- */
+
+/* Keyboard focus must always be obvious. Never remove this. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* Older browsers that do not support :focus-visible */
+:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+
+/* Skip link: hidden until focused, then it appears at the top-left. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--accent);
+  color: #04101f;
+  padding: .6rem 1rem;
+  font-weight: 700;
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+.skip-link:focus { left: 0; }
+
+/* Visible only to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Respect the operating system's "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* Forced-colour / high-contrast mode: keep borders visible. */
+@media (forced-colors: active) {
+  .panel, .card, .drop-zone, table, th, td { border: 1px solid CanvasText; }
+}
+
+/* --------------------------------------------------------------------------
+   4. Layout
+   -------------------------------------------------------------------------- */
+.wrap {
+  width: 100%;
+  max-width: var(--wrap);
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+.main { padding-block: 1.25rem 4rem; display: grid; gap: 1.25rem; }
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+  background: rgba(14, 20, 32, .88);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(6px);
+}
+
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: .75rem;
+}
+
+.brand { display: flex; align-items: center; gap: .75rem; }
+
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 42px; height: 42px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-strong);
+  color: var(--accent-text);
+  font-weight: 800;
+  font-size: .78rem;
+  letter-spacing: .06em;
+  flex: 0 0 auto;
+}
+
+.brand__name { margin: 0; font-weight: 700; font-size: 1.02rem; letter-spacing: .01em; }
+.brand__subtitle { margin: 0; color: var(--text-muted); font-size: .86rem; }
+
+.header-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+/* --------------------------------------------------------------------------
+   5. Badges and chips
+   -------------------------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  font-size: .74rem;
+  font-weight: 650;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.badge--calm { background: var(--accent-soft); color: var(--accent-text); }
+.badge--demo { background: #3b2f10; color: #fde68a; border-color: #6b5518; }
+.badge--info { background: var(--sev-info-bg); color: var(--sev-info); border-color: #1d4d68; }
+.badge--low { background: var(--sev-low-bg); color: var(--sev-low); border-color: #245c37; }
+.badge--medium { background: var(--sev-medium-bg); color: var(--sev-medium); border-color: #6b5518; }
+.badge--high { background: var(--sev-high-bg); color: var(--sev-high); border-color: #7a2b2f; }
+.badge--ok { background: var(--ok-bg); color: var(--ok); border-color: #245c37; }
+
+/* --------------------------------------------------------------------------
+   6. Privacy banner and notices
+   -------------------------------------------------------------------------- */
+.privacy-banner {
+  background: linear-gradient(180deg, #14243a, #101a29);
+  border-bottom: 1px solid var(--border-strong);
+}
+.privacy-banner__inner {
+  display: flex;
+  gap: .85rem;
+  align-items: flex-start;
+  padding-block: 1rem;
+}
+.privacy-banner__icon { font-size: 1.5rem; line-height: 1; }
+.privacy-banner__heading { font-size: 1rem; margin-bottom: .2rem; }
+.privacy-banner__text { color: var(--accent-text); margin-bottom: .35rem; }
+.privacy-banner__note { color: var(--text-muted); font-size: .86rem; margin: 0; max-width: 80ch; }
+
+.notice {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: .9rem 1.1rem;
+}
+.notice--disclaimer { border-left-color: var(--warn); background: linear-gradient(180deg, var(--warn-bg), var(--surface)); }
+.notice--disclaimer .notice__heading { color: var(--warn); }
+.notice__heading { font-size: .95rem; text-transform: uppercase; letter-spacing: .06em; margin-bottom: .4rem; }
+
+/* --------------------------------------------------------------------------
+   7. Panels / cards
+   -------------------------------------------------------------------------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  box-shadow: var(--shadow);
+}
+.panel__heading {
+  font-size: 1.12rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.panel__lede { color: var(--text-muted); max-width: 82ch; }
+
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .85rem 1rem;
+}
+
+.grid { display: grid; gap: var(--gap); }
+.grid--2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid--stats { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+
+/* --------------------------------------------------------------------------
+   8. Details / how-to blocks
+   -------------------------------------------------------------------------- */
+.howto {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: .55rem .85rem;
+  margin-top: .6rem;
+}
+.howto__summary { cursor: pointer; font-weight: 650; padding: .25rem 0; }
+.howto__steps { margin-top: .5rem; }
+.howto__hint { color: var(--text-muted); font-size: .88rem; margin-top: .5rem; }
+
+.code-block {
+  margin: .6rem 0 0;
+  padding: .8rem 1rem;
+  overflow-x: auto;
+  background: #0b111c;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: #dbe6f5;
+  font-size: .84rem;
+  line-height: 1.5;
+}
+.code-block code { background: none; border: 0; padding: 0; color: inherit; }
+
+/* --------------------------------------------------------------------------
+   9. Buttons
+   -------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 650;
+  padding: .5rem .9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+  min-height: 40px; /* comfortable click/tap target */
+  text-align: center;
+}
+.btn:hover:not(:disabled) { background: #2b3850; border-color: #4a5d7d; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn--primary { background: var(--accent); border-color: #2f6ed8; color: #04101f; }
+.btn--primary:hover:not(:disabled) { background: #6ba3ff; border-color: #2f6ed8; }
+.btn--ghost { background: transparent; }
+.btn--ghost:hover:not(:disabled) { background: var(--surface-3); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* --------------------------------------------------------------------------
+   10. Upload area / drop zone
+   -------------------------------------------------------------------------- */
+.upload { margin-top: .75rem; }
+
+.drop-zone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.drop-zone.is-dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drop-zone__label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  padding: 1.6rem 1rem;
+  cursor: pointer;
+  text-align: center;
+}
+.drop-zone__icon { font-size: 1.9rem; color: var(--accent-text); line-height: 1; }
+.drop-zone__title { font-weight: 650; font-size: 1rem; }
+.drop-zone__hint { color: var(--text-muted); font-size: .85rem; }
+.drop-zone__label .btn { pointer-events: none; } /* the label itself is the control */
+
+.upload__privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: .45rem;
+  margin-top: .6rem;
+  color: var(--text-muted);
+  font-size: .86rem;
+}
+
+/* --------------------------------------------------------------------------
+   11. File metadata
+   -------------------------------------------------------------------------- */
+.upload__meta {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: .5rem .9rem;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 260px;
+}
+.meta-grid dt {
+  color: var(--text-faint);
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.meta-grid dd {
+  margin: .1rem 0 0;
+  font-family: var(--mono);
+  font-size: .86rem;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   12. Status / error messages
+   -------------------------------------------------------------------------- */
+.status {
+  margin: .9rem 0 0;
+  padding: .6rem .85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+.status--ok { border-left-color: var(--ok); background: linear-gradient(180deg, var(--ok-bg), var(--surface-2)); color: var(--text); }
+.status--warn { border-left-color: var(--warn); background: linear-gradient(180deg, var(--warn-bg), var(--surface-2)); color: var(--text); }
+.status--error { border-left-color: var(--danger); background: linear-gradient(180deg, var(--danger-bg), var(--surface-2)); color: var(--text); }
+.status--busy { border-left-color: var(--accent); }
+
+.error-box {
+  margin-top: .75rem;
+  padding: .8rem 1rem;
+  border: 1px solid #7a2b2f;
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--text);
+  font-size: .9rem;
+}
+.error-box__title { font-weight: 700; margin-bottom: .25rem; }
+.error-box__help { color: var(--text-muted); font-size: .86rem; margin-top: .4rem; }
+
+.notice--warn { border-left-color: var(--warn); background: linear-gradient(180deg, var(--warn-bg), var(--surface)); margin-top: 1rem; }
+.notice--warn .notice__heading { color: var(--warn); }
+
+/* --------------------------------------------------------------------------
+   13. Demo / test-mode bar
+   -------------------------------------------------------------------------- */
+.demo-bar {
+  margin-top: 1.25rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(135deg, rgba(252, 211, 77, .05) 0 12px, transparent 12px 24px),
+    var(--surface-2);
+}
+.demo-bar__head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.demo-bar__heading { font-size: .95rem; text-transform: uppercase; letter-spacing: .06em; margin: 0; color: var(--text-muted); }
+.demo-bar__note { font-size: .86rem; color: var(--text-muted); margin: .3rem 0 .6rem; }
+.demo-bar__buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+.demo-bar__hint { font-size: .82rem; color: var(--text-faint); margin: .55rem 0 0; }
+
+/* --------------------------------------------------------------------------
+   14. Statistics tiles
+   -------------------------------------------------------------------------- */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  padding: .7rem .85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.stat__value { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.stat__label { font-size: .78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.stat--info { border-left: 4px solid var(--sev-info); }
+.stat--low { border-left: 4px solid var(--sev-low); }
+.stat--medium { border-left: 4px solid var(--sev-medium); }
+.stat--high { border-left: 4px solid var(--sev-high); }
+.stat--accent { border-left: 4px solid var(--accent); }
+
+/* --------------------------------------------------------------------------
+   15. Column report lists
+   -------------------------------------------------------------------------- */
+.card__heading { font-size: .95rem; margin-bottom: .4rem; }
+.card__note { font-size: .84rem; color: var(--text-muted); margin: .4rem 0 0; }
+
+.col-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .25rem; }
+.col-list li {
+  display: flex;
+  gap: .5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: .3rem .5rem;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: .85rem;
+  margin: 0;
+}
+.col-list__name { font-weight: 620; }
+.col-list__value { font-family: var(--mono); font-size: .8rem; color: var(--text-muted); overflow-wrap: anywhere; text-align: right; }
+.col-list--missing li { border-left: 3px solid var(--warn); }
+.col-list__none { color: var(--text-muted); font-size: .85rem; margin: 0; }
+
+/* --------------------------------------------------------------------------
+   16. Tables
+   -------------------------------------------------------------------------- */
+.table-scroll { overflow-x: auto; margin-top: .6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 760px;
+  font-size: .85rem;
+}
+.data-table caption {
+  caption-side: top;
+  text-align: left;
+  padding: .6rem .75rem;
+  color: var(--text-muted);
+  font-size: .82rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.data-table th, .data-table td {
+  text-align: left;
+  padding: .45rem .6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.data-table thead th {
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: .76rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+.data-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, .018); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table td.cell-mono { font-family: var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.data-table td.cell-message { max-width: 380px; overflow-wrap: anywhere; color: var(--text-muted); }
+.data-table tbody tr.row-noteworthy { box-shadow: inset 3px 0 0 var(--accent); }
+
+.table-empty { padding: 1rem; color: var(--text-muted); font-size: .88rem; }
+
+/* --------------------------------------------------------------------------
+   17. Empty states / placeholders for later build steps
+   -------------------------------------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  text-align: center;
+  align-items: center;
+}
+.empty-state__title { font-weight: 650; color: var(--text); }
+.empty-state__text { font-size: .88rem; max-width: 62ch; }
+
+/* --------------------------------------------------------------------------
+   18. Educational content
+   -------------------------------------------------------------------------- */
+.ref-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.ref-table th, .ref-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ref-table thead th { background: var(--surface-3); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+.ref-table td.ref-id { font-family: var(--mono); font-weight: 700; white-space: nowrap; color: var(--accent-text); }
+.ref-table tbody tr:last-child td { border-bottom: 0; }
+
+.workflow { counter-reset: socstep; list-style: none; padding: 0; margin: .75rem 0 0; display: grid; gap: .5rem; }
+.workflow li {
+  counter-increment: socstep;
+  position: relative;
+  padding: .6rem .8rem .6rem 2.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  margin: 0;
+  font-size: .9rem;
+}
+.workflow li::before {
+  content: counter(socstep);
+  position: absolute;
+  left: .7rem;
+  top: .55rem;
+  width: 1.4rem; height: 1.4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-strong);
+  color: var(--accent-text);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.key-quote {
+  margin: .9rem 0 0;
+  padding: .85rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: .95rem;
+  color: var(--text);
+}
+.key-quote p { margin: 0; }
+.key-quote p + p { margin-top: .5rem; }
+
+/* --------------------------------------------------------------------------
+   19. Footer
+   -------------------------------------------------------------------------- */
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding-block: 1.5rem 2.5rem;
+  color: var(--text-muted);
+  font-size: .86rem;
+}
+.site-footer__inner { display: grid; gap: .5rem; justify-items: start; }
+.site-footer strong { color: var(--text); }
+
+/* --------------------------------------------------------------------------
+   20. Small screens
+   -------------------------------------------------------------------------- */
+@media (max-width: 620px) {
+  .privacy-banner__inner { flex-direction: column; }
+  .brand__name { font-size: .96rem; }
+  .stat__value { font-size: 1.25rem; }
+  .panel { padding: .9rem .85rem; }
+  .data-table { min-width: 620px; }
+}
+
+/* --------------------------------------------------------------------------
+   21. Print (handy if a student wants a paper copy of the report)
+   -------------------------------------------------------------------------- */
+@media print {
+  :root {
+    --bg: #fff; --surface: #fff; --surface-2: #fff; --surface-3: #f2f4f7;
+    --text: #101418; --text-muted: #3c4552; --border: #c3cbd6;
+  }
+  .site-header, .drop-zone, .demo-bar, .upload__meta, #btn-reset { display: none !important; }
+  .panel { break-inside: avoid; box-shadow: none; }
+}
+
+
+
+

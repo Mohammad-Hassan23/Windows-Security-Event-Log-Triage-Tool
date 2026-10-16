@@ -1,0 +1,23 @@
+# Nothing here is required to RUN the tool - it is a static site with no build step.
+# These entries only keep development / OS clutter out of the repository.
+
+# OS clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Node is only used for the optional automated test harness (dev-tests/).
+node_modules/
+npm-debug.log*
+
+# Local scratch files
+*.tmp
+*.local
+
+# Agent/session scratch folder (not part of the project)
+.cline-home/
