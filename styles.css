@@ -671,16 +671,141 @@ kbd {
 }
 
 /* --------------------------------------------------------------------------
-   21. Print (handy if a student wants a paper copy of the report)
+   22. Findings
+   -------------------------------------------------------------------------- */
+.finding {
+  border: 1px solid var(--border-strong);
+  border-left-width: 5px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.finding:last-child { margin-bottom: 0; }
+.finding--high { border-left-color: var(--sev-high); }
+.finding--medium { border-left-color: var(--sev-medium); }
+.finding--low { border-left-color: var(--sev-low); }
+.finding--info { border-left-color: var(--sev-info); }
+
+.finding__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+}
+.finding__title { font-size: 1.05rem; font-weight: 700; margin: 0; }
+.finding__badges { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+.finding__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: .4rem .9rem;
+  margin: 0 0 .75rem;
+}
+.finding__meta dt {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-faint);
+}
+.finding__meta dd { margin: .1rem 0 0; font-size: .88rem; overflow-wrap: anywhere; }
+.finding__meta dd.mono { font-family: var(--mono); font-size: .82rem; }
+
+.finding__section { margin-top: .75rem; }
+.finding__section h4 {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  margin: 0 0 .25rem;
+}
+.finding__section p { font-size: .9rem; margin: 0; }
+.finding__section ol, .finding__section ul { font-size: .9rem; margin: 0; padding-left: 1.25rem; }
+.finding__severity-reason { font-size: .88rem; color: var(--text-muted); }
+
+.score {
+  margin-top: .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: .6rem .8rem;
+}
+.score__title {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  margin: 0 0 .3rem;
+}
+.score__list { list-style: none; padding: 0; margin: 0; font-size: .88rem; }
+.score__list li {
+  display: flex;
+  gap: .6rem;
+  justify-content: space-between;
+  padding: .15rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+.score__points { font-family: var(--mono); color: var(--sev-medium); white-space: nowrap; }
+.score__total {
+  display: flex;
+  gap: .6rem;
+  justify-content: space-between;
+  margin-top: .35rem;
+  font-weight: 700;
+  font-size: .92rem;
+}
+.score__note { font-size: .8rem; color: var(--text-faint); margin: .4rem 0 0; }
+
+.finding__notes { margin-top: .7rem; }
+.finding__notes ul { font-size: .85rem; color: var(--text-muted); }
+
+/* --------------------------------------------------------------------------
+   23. Settings form
+   -------------------------------------------------------------------------- */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: .75rem 1rem;
+  margin-top: .5rem;
+}
+.field { display: flex; flex-direction: column; gap: .25rem; }
+.field label { font-weight: 620; font-size: .9rem; }
+.field input[type="number"] {
+  font: inherit;
+  font-size: .95rem;
+  padding: .45rem .55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  max-width: 12rem;
+}
+.field__hint { font-size: .82rem; color: var(--text-faint); margin: 0; }
+.field__hint--indent { margin-left: 1.6rem; }
+.field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .75rem;
+}
+.field--checkbox input { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+.settings-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.panel__note { font-size: .84rem; color: var(--text-muted); margin-top: .8rem; }
+
+/* --------------------------------------------------------------------------
+   24. Print (handy if a student wants a paper copy of the report)
    -------------------------------------------------------------------------- */
 @media print {
   :root {
     --bg: #fff; --surface: #fff; --surface-2: #fff; --surface-3: #f2f4f7;
     --text: #101418; --text-muted: #3c4552; --border: #c3cbd6;
   }
-  .site-header, .drop-zone, .demo-bar, .upload__meta, #btn-reset { display: none !important; }
-  .panel { break-inside: avoid; box-shadow: none; }
+  .site-header, .drop-zone, .demo-bar, .upload__meta, #btn-reset, .settings-actions { display: none !important; }
+  .panel, .finding { break-inside: avoid; box-shadow: none; }
 }
+
 
 
 

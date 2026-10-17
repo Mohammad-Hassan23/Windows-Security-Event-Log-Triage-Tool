@@ -528,17 +528,33 @@
       return p.valid ? p : blank;
     }
 
-    // 4. Something else entirely (e.g. "Fri Apr 3 2026"). Let the browser try,
-    //    but only trust the result if it produced a real date.
-    const fallback = Date.parse(input);
-    if (!isNaN(fallback)) {
-      const d = new Date(fallback);
-      return {
-        raw: input, kind: 'browser', valid: true,
-        year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(),
-        hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds(), ms: d.getMilliseconds(),
-        offsetMinutes: null, absoluteMs: fallback
-      };
+    // 4. Something else entirely, such as "Fri Apr 3 14:22:11 2026".
+    //
+    // ONLY the browser's own parser can handle those, and it is dangerously
+    // lenient: Date.parse("abc-0") returns the year 2000 and "abc-1" returns 2001,
+    // because a trailing "-0" is read as a year. An unguarded fallback would
+    // therefore INVENT timestamps out of rubbish, and an invented timestamp is
+    // worse than a missing one, because the time-window rules would then run on
+    // it. So the text must actually look like a date before we try, and the
+    // result must land in a believable range.
+    const looksLikeADate = /\d{4}/.test(input)
+      || /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(input);
+
+    if (looksLikeADate) {
+      const fallback = Date.parse(input);
+      if (!isNaN(fallback)) {
+        const parsed = new Date(fallback);
+        const year = parsed.getFullYear();
+        if (year >= 1990 && year <= 2200) {
+          return {
+            raw: input, kind: 'browser', valid: true,
+            year: year, month: parsed.getMonth() + 1, day: parsed.getDate(),
+            hour: parsed.getHours(), minute: parsed.getMinutes(), second: parsed.getSeconds(),
+            ms: parsed.getMilliseconds(),
+            offsetMinutes: null, absoluteMs: fallback
+          };
+        }
+      }
     }
 
     return blank;
@@ -1546,6 +1562,553 @@
   }
 
   /* ------------------------------------------------------------------------
+   * Settings for the detection rules
+   * ------------------------------------------------------------------------
+   * These are EDUCATIONAL DEFAULTS, not universal SOC detection rules. Every
+   * environment is different: a lab with five users and a company with five
+   * thousand will not want the same numbers.
+   *
+   * The limits below exist so that a typo cannot produce nonsense - a threshold
+   * of 0 would flag every single failure, which teaches nothing.
+   */
+  const DEFAULT_SETTINGS = {
+    failedLogonThreshold: 5,
+    failedLogonWindowMinutes: 10,
+    useTimeWindow: true,
+    rules: {
+      repeatedFailedLogons: true,
+      failedLogonsFollowedBySuccess: true,
+      accountCreatedThenPrivileged: true,
+      securityLogCleared: true,
+      administrativeActivitySummary: true
+    }
+  };
+
+  const SETTING_LIMITS = {
+    failedLogonThreshold: { min: 2, max: 1000 },
+    failedLogonWindowMinutes: { min: 1, max: 1440 }
+  };
+
+  /** A fresh copy of the defaults, so callers can never mutate the originals. */
+  function defaultSettings() {
+    return {
+      failedLogonThreshold: DEFAULT_SETTINGS.failedLogonThreshold,
+      failedLogonWindowMinutes: DEFAULT_SETTINGS.failedLogonWindowMinutes,
+      useTimeWindow: DEFAULT_SETTINGS.useTimeWindow,
+      rules: Object.assign({}, DEFAULT_SETTINGS.rules)
+    };
+  }
+
+  /** Clamp and repair whatever the user typed, rather than trusting it. */
+  function normalizeSettings(raw) {
+    const settings = defaultSettings();
+    const input = raw || {};
+
+    if (isFinite(input.failedLogonThreshold)) {
+      const limits = SETTING_LIMITS.failedLogonThreshold;
+      settings.failedLogonThreshold = Math.max(limits.min,
+        Math.min(limits.max, Math.round(Number(input.failedLogonThreshold))));
+    }
+    if (isFinite(input.failedLogonWindowMinutes)) {
+      const limits = SETTING_LIMITS.failedLogonWindowMinutes;
+      settings.failedLogonWindowMinutes = Math.max(limits.min,
+        Math.min(limits.max, Math.round(Number(input.failedLogonWindowMinutes))));
+    }
+    if (typeof input.useTimeWindow === 'boolean') settings.useTimeWindow = input.useTimeWindow;
+
+    if (input.rules) {
+      Object.keys(settings.rules).forEach(function (key) {
+        if (typeof input.rules[key] === 'boolean') settings.rules[key] = input.rules[key];
+      });
+    }
+    return settings;
+  }
+
+  /* ------------------------------------------------------------------------
+   * Explainable scoring
+   * ------------------------------------------------------------------------
+   * Every finding collects a short list of named contributions and shows the
+   * arithmetic. This is an educational PRIORITISATION mechanism: a way to put
+   * findings in an order. It is NOT a probability, and the interface must say so
+   * wherever the number appears. Nothing here should ever be rendered as
+   * "93% likely to be an attack".
+   */
+  const SCORE_WEIGHTS = {
+    repeatedFailedLogons: { points: 10, label: 'repeated failed logons' },
+    failedLogonsFollowedBySuccess: { points: 20, label: 'a successful sign-in following the failures' },
+    newAccountGrantedPrivileges: { points: 25, label: 'a new account granted privileges' },
+    privilegedGroupChange: { points: 25, label: 'a privileged group membership change' },
+    securityLogCleared: { points: 30, label: 'the security audit log being cleared' }
+  };
+
+  function addScore(finding, key, detail) {
+    const weight = SCORE_WEIGHTS[key];
+    if (!weight) return;
+    finding.score.factors.push({
+      points: weight.points,
+      label: weight.label + (detail ? ' (' + detail + ')' : '')
+    });
+    finding.score.total += weight.points;
+  }
+
+  /* ------------------------------------------------------------------------
+   * Building a finding
+   * ------------------------------------------------------------------------
+   * Every finding carries the same fields, which is what the report format in
+   * the specification asks for. Keeping the shape in one place means the user
+   * interface never has to guess what a finding contains.
+   *
+   * `events` holds references to the actual events that produced the finding, so
+   * every claim can be traced back to rows in the uploaded file.
+   */
+  function makeFinding(spec) {
+    const events = spec.events || [];
+    const finding = {
+      rule: spec.rule,
+      name: spec.name,
+      severity: spec.severity,
+      severityReasons: spec.severityReasons || [],
+      account: spec.account || '',
+      actor: spec.actor || '',
+      eventIds: spec.eventIds || [],
+      events: events,
+      eventCount: events.length,
+      firstMs: null,
+      lastMs: null,
+      timeRangeText: '',
+      durationText: '',
+      sourceIps: spec.sourceIps || [],
+      workstations: spec.workstations || [],
+      observedActivity: spec.observedActivity || '',
+      whyItMatters: spec.whyItMatters || '',
+      benign: spec.benign || '',
+      investigation: spec.investigation || [],
+      notes: spec.notes || [],
+      score: { total: 0, factors: [] }
+    };
+
+    // Time range, when the events have usable timestamps.
+    const times = [];
+    events.forEach(function (e) {
+      if (e.timestamp && e.timestamp.valid) times.push(e.timestamp.ms);
+    });
+
+    if (times.length) {
+      finding.firstMs = Math.min.apply(null, times);
+      finding.lastMs = Math.max.apply(null, times);
+      finding.timeRangeText = toIsoString(finding.firstMs) + ' to ' + toIsoString(finding.lastMs);
+      finding.durationText = formatDuration(finding.lastMs - finding.firstMs);
+    } else {
+      finding.timeRangeText = 'no readable timestamps in these events';
+    }
+
+    finding.id = spec.rule + '|' + (spec.accountKey || '') + '|'
+      + (finding.firstMs === null ? 'notime' : finding.firstMs);
+
+    (spec.scoreKeys || []).forEach(function (entry) {
+      addScore(finding, entry.key, entry.detail);
+    });
+
+    return finding;
+  }
+
+  /** Distinct, non-empty values, in the order they first appear. */
+  function distinctValues(values) {
+    const seen = {};
+    const out = [];
+    (values || []).forEach(function (value) {
+      const text = cleanCell(value);
+      if (!text) return;
+      const key = text.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(seen, key)) return;
+      seen[key] = true;
+      out.push(text);
+    });
+    return out;
+  }
+
+  /** "1 event" / "3 events" - plain English counting, used in finding text. */
+  function plural(count, singular, pluralForm) {
+    const n = Number(count) || 0;
+    return n + ' ' + (n === 1 ? singular : (pluralForm || singular + 's'));
+  }
+
+  /** "a, b and c" - used to read values back to the user in plain English. */
+  function joinWithAnd(values) {
+    const list = (values || []).filter(function (v) { return cleanCell(v) !== ''; });
+    if (!list.length) return '';
+    if (list.length === 1) return list[0];
+    return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+  }
+
+  /** Sorts events by time. Events with no readable time go last, in file order. */
+  function sortByTime(events) {
+    return events.slice().sort(function (a, b) {
+      const at = a.timestamp && a.timestamp.valid ? a.timestamp.ms : null;
+      const bt = b.timestamp && b.timestamp.valid ? b.timestamp.ms : null;
+      if (at === null && bt === null) return a.index - b.index;
+      if (at === null) return 1;
+      if (bt === null) return -1;
+      return at - bt || a.index - b.index;
+    });
+  }
+
+  /**
+   * Find the busiest run of events inside a sliding time window.
+   *
+   * HOW IT WORKS: the events are sorted by time, then a "two pointer" scan moves
+   * the start forward one event at a time while the end only ever moves forward
+   * too. That makes the whole scan a single pass rather than comparing every
+   * event with every other one, which matters when a file holds 200,000 rows.
+   *
+   * @returns {{clusters: Array, largest: object|null}}
+   */
+  function findTimeClusters(timedEvents, windowMs, threshold) {
+    const clusters = [];
+    if (!timedEvents.length) return { clusters: clusters, largest: null };
+
+    let end = 0;
+    for (let start = 0; start < timedEvents.length; start++) {
+      if (end < start) end = start;
+      while (end + 1 < timedEvents.length
+        && timedEvents[end + 1].timestamp.ms - timedEvents[start].timestamp.ms <= windowMs) {
+        end++;
+      }
+      const size = end - start + 1;
+      if (size >= threshold) {
+        clusters.push({
+          startIndex: start,
+          endIndex: end,
+          size: size,
+          firstMs: timedEvents[start].timestamp.ms,
+          lastMs: timedEvents[end].timestamp.ms
+        });
+      }
+    }
+
+    let largest = null;
+    clusters.forEach(function (cluster) {
+      if (!largest || cluster.size > largest.size) largest = cluster;
+    });
+
+    return { clusters: clusters, largest: largest };
+  }
+
+  /* ------------------------------------------------------------------------
+   * RULE 1 - repeated failed logons
+   * ------------------------------------------------------------------------
+   * WHAT IT LOOKS FOR
+   *   The same account failing to sign in repeatedly. One failure is ordinary; a
+   *   burst is worth a look.
+   *
+   * THE TWO SETTINGS THAT SHAPE IT
+   *   failedLogonThreshold      how many failures count as "repeated" (default 5)
+   *   failedLogonWindowMinutes  how close together they must be (default 10)
+   *
+   * A DELIBERATE DESIGN CHOICE WORTH UNDERSTANDING
+   *   Five failures in ten minutes and five failures spread across a week are not
+   *   the same thing, and a beginner should learn that difference. So:
+   *     - a burst inside the window       -> Medium priority (High if far above
+   *                                          the threshold), because it looks like
+   *                                          someone working through passwords
+   *     - the same count spread over time -> Low priority, with a note explaining
+   *                                          why it is less interesting
+   *   Neither result is ever called malicious.
+   *
+   * WHEN THE WINDOW CANNOT BE USED
+   *   Timestamps in some exports are missing or ambiguous. Rather than quietly
+   *   guessing, the window is skipped, everything is counted together, and the
+   *   finding says so.
+   *
+   * WHY THERE IS ONLY ONE FINDING PER ACCOUNT
+   *   A sliding window produces many overlapping groups of the same events.
+   *   Reporting each one would bury the student in duplicates of the same story,
+   *   so the busiest group is reported and any separate burst is mentioned as a
+   *   note instead.
+   */
+  function analyseRepeatedFailedLogons(context) {
+    const findings = [];
+    const notes = [];
+    const settings = context.settings;
+    const threshold = settings.failedLogonThreshold;
+    const windowMinutes = settings.failedLogonWindowMinutes;
+    const windowMs = windowMinutes * 60000;
+    const useWindow = settings.useTimeWindow && context.timelineReliable;
+
+    const failures = context.events.filter(function (e) { return e.eventId === 4625; });
+    if (!failures.length) return { findings: findings, notes: notes };
+
+    /* ---- group by account ---------------------------------------------- */
+    const byAccount = {};
+    let unattributed = 0;
+
+    failures.forEach(function (event) {
+      const key = event.accountKey;
+      if (!key) {
+        // No account anywhere in the row or the message. Grouping these together
+        // would invent a relationship between unrelated events, so they are left
+        // out of the rule and reported as a limitation instead.
+        unattributed++;
+        return;
+      }
+      if (!byAccount[key]) byAccount[key] = [];
+      byAccount[key].push(event);
+    });
+
+    if (unattributed) {
+      notes.push(unattributed + ' failed logon event(s) could not be attributed to an account, because neither the CSV column nor the message named one. '
+        + 'They are counted in the dashboard totals, but grouping them would invent a link between unrelated attempts, so no repeated-failure finding is raised for them.');
+    }
+
+    /* ---- one finding per account --------------------------------------- */
+    Object.keys(byAccount).forEach(function (key) {
+      const all = sortByTime(byAccount[key]);
+      const timed = all.filter(function (e) { return e.timestamp && e.timestamp.valid; });
+      const untimedCount = all.length - timed.length;
+      const account = all[0].account || '(account not named)';
+      const findingNotes = [];
+
+      let analysed = [];
+      let burst = false;
+      let windowApplied = false;
+
+      if (useWindow) {
+        const scan = findTimeClusters(timed, windowMs, threshold);
+
+        if (scan.largest) {
+          analysed = timed.slice(scan.largest.startIndex, scan.largest.endIndex + 1);
+          burst = true;
+          windowApplied = true;
+
+          const separate = scan.clusters.filter(function (cluster) {
+            return cluster.startIndex > scan.largest.endIndex || cluster.endIndex < scan.largest.startIndex;
+          });
+          if (separate.length) {
+            findingNotes.push('The same account also had ' + plural(separate.length, 'further burst')
+              + ' of failures elsewhere in this file. Each burst is described once rather than once per overlapping group of events, '
+              + 'so this finding is not duplicated.');
+          }
+          if (untimedCount) {
+            findingNotes.push(plural(untimedCount, 'failure') + ' for this account had no readable timestamp and could not be placed in the time window.');
+          }
+        } else if (all.length >= threshold) {
+          // Enough failures in total, but never enough close together.
+          analysed = all;
+          findingNotes.push('There are ' + plural(all.length, 'failure') + ' for this account in this file, but never '
+            + threshold + ' or more within ' + windowMinutes + ' minute(s). Failures spread out like this are less indicative of password guessing than a burst, '
+            + 'which is why this finding carries a lower priority.');
+          if (untimedCount) {
+            findingNotes.push(plural(untimedCount, 'failure') + ' had no readable timestamp, so the time window could not be applied to '
+              + (untimedCount === 1 ? 'it' : 'them') + '.');
+          }
+        } else {
+          return; // below the threshold: nothing to report for this account
+        }
+      } else {
+        if (all.length < threshold) return;
+        analysed = all;
+        findingNotes.push(settings.useTimeWindow
+          ? 'The timestamps in this file are not reliable enough to apply a time window, so all failures for this account were counted together.'
+          : 'The time window is switched off in the settings, so all failures for this account in this file were counted together.');
+      }
+
+      /* ---- what the events actually show -------------------------------- */
+      const sourceIps = distinctValues(analysed.map(function (e) { return e.fields.sourceIp; }));
+      const workstations = distinctValues(analysed.map(function (e) {
+        return isBlankValue(e.fields.workstation) ? '' : e.fields.workstation;
+      }));
+      const logonTypes = distinctValues(analysed.map(function (e) {
+        return e.fields.logonTypeText || (e.fields.logonType ? 'type ' + e.fields.logonType : '');
+      }));
+      const reasons = distinctValues(analysed.map(function (e) {
+        return e.fields.statusText || e.fields.subStatusText || e.fields.failureReason;
+      }));
+
+      /* ---- priority ------------------------------------------------------
+       * Three distinct situations, and they deserve different priorities:
+       *   burst inside the window   -> Medium (High if far above threshold)
+       *   enough failures, but never enough close together -> Low, because a
+       *     slow trickle is much weaker evidence of password guessing
+       *   window not used at all (switched off, or unreliable timestamps) -> the
+       *     count is all we have, so Medium rather than Low. Labelling it "spread
+       *     out" here would be misleading: we simply do not know. */
+      const spreadOut = useWindow && !burst;
+      let severity = SEVERITY.MEDIUM;
+      const severityReasons = [];
+
+      if (burst) {
+        severityReasons.push(plural(analysed.length, 'failed sign-in attempt') + ' for one account inside '
+          + windowMinutes + ' minute(s), against a configured threshold of ' + threshold + '.');
+        if (analysed.length >= threshold * 2) {
+          severity = SEVERITY.HIGH;
+          severityReasons.push('The number of failures (' + analysed.length + ') is at least twice the configured threshold, '
+            + 'so this burst is well above what the settings treat as notable.');
+        }
+      } else if (spreadOut) {
+        severity = SEVERITY.LOW;
+        severityReasons.push('The failures for this account are spread out rather than clustered, which is less indicative of password guessing than a burst.');
+      } else {
+        severityReasons.push('The time window was not applied to this account'
+          + (settings.useTimeWindow ? ' because the timestamps are not reliable enough' : ' because it is switched off in the settings')
+          + ', so all ' + plural(analysed.length, 'failure') + ' for this account were counted together against the threshold of ' + threshold + '.');
+      }
+
+      /* ---- observed activity -------------------------------------------- */
+      const times = [];
+      analysed.forEach(function (e) {
+        if (e.timestamp && e.timestamp.valid) times.push(e.timestamp.ms);
+      });
+      const firstMs = times.length ? Math.min.apply(null, times) : null;
+      const lastMs = times.length ? Math.max.apply(null, times) : null;
+
+      const sentences = [];
+      sentences.push('The account "' + account + '" recorded ' + plural(analysed.length, 'failed sign-in attempt')
+        + (firstMs === null ? ' in this file.' : ' between ' + toIsoString(firstMs) + ' and ' + toIsoString(lastMs)
+          + ' (' + formatDuration(lastMs - firstMs) + ').'));
+
+      if (windowApplied) {
+        sentences.push('The busiest run of ' + analysed.length + ' attempts sits inside a single '
+          + windowMinutes + '-minute window.');
+      }
+
+      sentences.push(sourceIps.length
+        ? 'The attempts came from ' + joinWithAnd(sourceIps) + '.'
+        : 'No source address was recorded in these events, so the origin cannot be established from this file.');
+
+      if (workstations.length) {
+        sentences.push('The workstation name recorded was ' + joinWithAnd(workstations) + '.');
+      }
+      if (logonTypes.length) {
+        sentences.push('The logon type recorded was ' + joinWithAnd(logonTypes) + '.');
+      }
+      if (reasons.length) {
+        sentences.push('The recorded reason was: ' + reasons.join('; ') + '.');
+      }
+
+      findings.push(makeFinding({
+        rule: 'repeatedFailedLogons',
+        name: 'Repeated Failed Logons',
+        account: account,
+        accountKey: key,
+        severity: severity,
+        severityReasons: severityReasons,
+        eventIds: [4625],
+        events: analysed,
+        sourceIps: sourceIps,
+        workstations: workstations,
+        observedActivity: sentences.join(' '),
+        whyItMatters: 'Repeated authentication failures may indicate password guessing, but they could also be caused by a legitimate user '
+          + 'entering the wrong password, or an application using outdated credentials.',
+        benign: 'The most common explanation is an ordinary person mistyping a password, or a saved credential somewhere - a phone, a printer '
+          + 'or a scheduled backup job - still using an old password. A service or scheduled task with an expired password looks exactly like this.',
+        investigation: [
+          'Identify the source system or address the attempts came from.',
+          'Review the affected account: is it a person, a service account or a machine account?',
+          'Check whether the failures were followed by a successful sign-in.',
+          'Determine whether other accounts were targeted from the same place.',
+          'Review MFA or endpoint telemetry if it is available.'
+        ],
+        notes: findingNotes,
+        scoreKeys: [{ key: 'repeatedFailedLogons', detail: plural(analysed.length, 'attempt') + ', threshold ' + threshold }]
+      }));
+    });
+    return { findings: findings, notes: notes };
+  }
+
+  /* ------------------------------------------------------------------------
+   * Running the rules
+   * ------------------------------------------------------------------------
+   * analyse() is deliberately separate from parse() so that the settings can be
+   * changed and the rules re-run WITHOUT reading the file again. That keeps the
+   * interface responsive while a student experiments with the threshold.
+   *
+   * The result is a list of findings, sorted by investigative priority, plus
+   * notes about anything the rules could not do (for example a time window that
+   * had to be skipped).
+   */
+  function analyse(parseResult, rawSettings) {
+    const settings = normalizeSettings(rawSettings);
+    const notes = [];
+    const findings = [];
+
+    if (!parseResult || !parseResult.ok) {
+      return {
+        ok: false,
+        settings: settings,
+        findings: [],
+        notes: ['There is no successfully parsed data to analyse.'],
+        stats: null
+      };
+    }
+
+    const events = parseResult.events || [];
+    const context = {
+      events: events,
+      settings: settings,
+      timelineReliable: !!(parseResult.stats && parseResult.stats.timelineReliable),
+      parseResult: parseResult
+    };
+
+    if (settings.rules.repeatedFailedLogons) {
+      const ruleResult = analyseRepeatedFailedLogons(context);
+      ruleResult.findings.forEach(function (f) { findings.push(f); });
+      ruleResult.notes.forEach(function (n) { notes.push(n); });
+    }
+
+    /* DE-DUPLICATION.
+     * Rules are written so that one account produces one finding per activity,
+     * but two rules can legitimately describe the same events (a burst of
+     * failures may later also be part of a "failures then success" finding).
+     * Identical findings are collapsed here so the student never sees the same
+     * activity reported twice. */
+    const seen = {};
+    const unique = [];
+    findings.forEach(function (finding) {
+      if (seen[finding.id]) return;
+      seen[finding.id] = true;
+      unique.push(finding);
+    });
+
+    /* Most serious first, then by score, then by time. */
+    unique.sort(function (a, b) {
+      const byRank = severityRank(b.severity) - severityRank(a.severity);
+      if (byRank !== 0) return byRank;
+      if (b.score.total !== a.score.total) return b.score.total - a.score.total;
+      if (a.firstMs === null && b.firstMs === null) return 0;
+      if (a.firstMs === null) return 1;
+      if (b.firstMs === null) return -1;
+      return a.firstMs - b.firstMs;
+    });
+
+    /* Dashboard figures. Built here so the tests and the interface agree. */
+    const bySeverity = { Informational: 0, Low: 0, Medium: 0, High: 0 };
+    unique.forEach(function (finding) {
+      if (bySeverity[finding.severity] === undefined) bySeverity[finding.severity] = 0;
+      bySeverity[finding.severity]++;
+    });
+
+    const involved = {};
+    unique.forEach(function (finding) {
+      finding.events.forEach(function (event) { involved[event.index] = true; });
+    });
+
+    return {
+      ok: true,
+      settings: settings,
+      findings: unique,
+      notes: notes,
+      stats: {
+        totalFindings: unique.length,
+        bySeverity: bySeverity,
+        highestSeverity: unique.length ? unique[0].severity : '',
+        eventsRequiringInvestigation: Object.keys(involved).length,
+        timelineReliable: context.timelineReliable,
+        windowApplied: settings.useTimeWindow && context.timelineReliable
+      }
+    };
+  }
+
+  /* ------------------------------------------------------------------------
    * The main entry point: CSV text in, report-ready event list out
    * ------------------------------------------------------------------------
    * Everything above this point is a building block. This function is the one
@@ -1919,6 +2482,21 @@
     finalizeTimestamp: finalizeTimestamp,
     toIsoString: toIsoString,
     formatDuration: formatDuration,
+
+    // Detection rules
+    analyse: analyse,
+    analyseRepeatedFailedLogons: analyseRepeatedFailedLogons,
+    defaultSettings: defaultSettings,
+    normalizeSettings: normalizeSettings,
+    DEFAULT_SETTINGS: DEFAULT_SETTINGS,
+    SETTING_LIMITS: SETTING_LIMITS,
+    SCORE_WEIGHTS: SCORE_WEIGHTS,
+    makeFinding: makeFinding,
+    sortByTime: sortByTime,
+    findTimeClusters: findTimeClusters,
+    distinctValues: distinctValues,
+    joinWithAnd: joinWithAnd,
+    plural: plural,
 
     // Severity
     severityRank: severityRank,

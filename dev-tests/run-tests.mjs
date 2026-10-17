@@ -635,6 +635,8 @@ test('script.js loads and initialises against a stubbed DOM without throwing', f
 
   // The status line should have been set by init(), proving the code really ran.
   assertIncludes(elements['status-region'].textContent, 'No file loaded yet', 'init() should have set the status message');
+});
+
 /* --------------------------------------------------------------------------
    A fuller page stub, used to actually CLICK the demo buttons.
    --------------------------------------------------------------------------
@@ -809,9 +811,6 @@ test('clearing the loaded data removes the Demo Data labelling', function () {
   assert(isHidden(page.elements['demo-chip']), 'the chip should be hidden again');
   assert(isHidden(page.elements['parse-panel']), 'the parse panel should be hidden again');
   assertIncludes(page.elements['status-region'].textContent, 'No file loaded yet', 'the status should reset');
-});
-
-
 });
 
 
@@ -1468,6 +1467,331 @@ test('the mixed dataset extraction matches the story it is meant to tell', funct
     assertEqual(failure.fields.sourceIp, '198.51.100.23');
   });
 });
+/* --------------------------------------------------------------------------
+   Tests: RULE 1 - repeated failed logons
+   --------------------------------------------------------------------------
+   These are the checks the specification asks for: the password-guessing sample
+   must trigger, the normal sample must stay quiet, and the settings must change
+   the outcome in a predictable way.
+   -------------------------------------------------------------------------- */
+group('Rule 1: repeated failed logons');
+
+function analyseSample(key, settings) {
+  return Core.analyse(Core.parse(SAMPLES[key].csv), settings);
+}
+
+function findingsNamed(analysis, name) {
+  return analysis.findings.filter(function (f) { return f.name === name; });
+}
+
+test('the password guessing sample triggers Repeated Failed Logons', function () {
+  const analysis = analyseSample('guessing');
+  const matches = findingsNamed(analysis, 'Repeated Failed Logons');
+  assertEqual(matches.length, 1, 'exactly one finding for this sample');
+
+  const finding = matches[0];
+  assertEqual(finding.account, 'jsmith');
+  assertEqual(finding.severity, 'Medium');
+  assertEqual(finding.eventCount, 8, 'all eight failures should be reported');
+  assertEqual(finding.eventIds.join(','), '4625');
+  assertEqual(finding.sourceIps.join(','), '203.0.113.44', 'the source address should be reported');
+  assertIncludes(finding.timeRangeText, '2026-04-07 02:14:02', 'the time range should be shown');
+  assertIncludes(finding.durationText, '4m 13s', 'the duration should be shown');
+});
+
+test('the finding contains every section the specification asks for', function () {
+  const finding = findingsNamed(analyseSample('guessing'), 'Repeated Failed Logons')[0];
+
+  assert(finding.name, 'alert name');
+  assert(finding.severity, 'severity');
+  assert(finding.eventIds.length, 'Event IDs');
+  assert(finding.account, 'account');
+  assert(finding.timeRangeText, 'timestamp or time range');
+  assert(finding.observedActivity.length > 40, 'observed activity');
+  assert(finding.whyItMatters.length > 40, 'why this matters');
+  assert(finding.benign.length > 40, 'a possible benign explanation');
+  assert(finding.investigation.length >= 3, 'suggested investigation steps');
+  assert(finding.score.factors.length >= 1, 'the score breakdown');
+  assert(finding.severityReasons.length >= 1, 'why this priority was chosen');
+});
+
+test('the observed activity reads as plain English about the real values', function () {
+  const finding = findingsNamed(analyseSample('guessing'), 'Repeated Failed Logons')[0];
+  assertIncludes(finding.observedActivity, 'jsmith', 'the account should be named');
+  assertIncludes(finding.observedActivity, '8 failed sign-in attempts', 'the count should be stated');
+  assertIncludes(finding.observedActivity, '203.0.113.44', 'the source address should be stated');
+  assertIncludes(finding.observedActivity, 'Network', 'the logon type should be explained');
+});
+
+test('the normal sample produces no failed logon finding at the default threshold', function () {
+  const analysis = analyseSample('normal');
+  assertEqual(findingsNamed(analysis, 'Repeated Failed Logons').length, 0,
+    'two mistyped passwords must not be escalated');
+  assertEqual(analysis.findings.length, 0, 'nothing at all should be escalated in the normal sample');
+  assertEqual(analysis.stats.highestSeverity, '', 'there should be no highest severity');
+});
+
+test('the threshold is configurable and changes the outcome', function () {
+  const normal = Core.parse(SAMPLES.normal.csv);
+
+  // mgrey mistypes a password twice. At the default threshold of 5 that is
+  // silent; if a student lowers it to 2 the tool should say something.
+  assertEqual(Core.analyse(normal, { failedLogonThreshold: 5 }).findings.length, 0);
+  const strict = Core.analyse(normal, { failedLogonThreshold: 2 });
+  assertEqual(strict.findings.length, 1, 'a threshold of 2 should catch the two failures');
+  assertEqual(strict.findings[0].account, 'mgrey');
+  assertEqual(strict.findings[0].eventCount, 2);
+
+  // And raising it above the sample's failure count silences the guessing sample.
+  const guessing = Core.parse(SAMPLES.guessing.csv);
+  assertEqual(Core.analyse(guessing, { failedLogonThreshold: 9 }).findings.length, 0,
+    'eight failures must not trigger a threshold of nine');
+  assertEqual(Core.analyse(guessing, { failedLogonThreshold: 8 }).findings.length, 1,
+    'eight failures should trigger a threshold of exactly eight');
+});
+
+test('the time window is configurable and changes the outcome', function () {
+  const guessing = Core.parse(SAMPLES.guessing.csv);
+
+  // The eight attempts span 4 minutes 13 seconds, so a one-minute window finds no
+  // burst at all: the tool should say so and lower the priority rather than
+  // pretending a burst happened.
+  const tight = Core.analyse(guessing, { failedLogonWindowMinutes: 1 });
+  assertEqual(tight.findings.length, 1, 'the failures are still worth reporting');
+  assertEqual(tight.findings[0].severity, 'Low', 'a slow trickle is a lower priority than a burst');
+  assertIncludes(tight.findings[0].severityReasons.join(' '), 'spread out', 'the reason should be stated');
+
+  // A five-minute window contains all eight attempts.
+  const wide = Core.analyse(guessing, { failedLogonWindowMinutes: 5 });
+  assertEqual(wide.findings[0].severity, 'Medium');
+  assertEqual(wide.findings[0].eventCount, 8, 'all eight attempts fall inside five minutes');
+});
+
+test('switching the time window off counts failures together and says so', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv), {
+    useTimeWindow: false,
+    failedLogonWindowMinutes: 1
+  });
+  const finding = analysis.findings[0];
+  assertEqual(finding.severity, 'Medium', 'with no window the count itself is the alert');
+  assertIncludes(finding.severityReasons.join(' '), 'switched off', 'the reason must not be hidden');
+  assertIncludes(finding.notes.join(' '), 'switched off in the settings', 'the finding should explain itself');
+  assertEqual(analysis.stats.windowApplied, false, 'the analysis should record that no window was applied');
+});
+
+test('invalid or missing timestamps never stop the rule from working', function () {
+  // Built from real lines rather than escaped ones, so the message has the same
+  // shape as a genuine Windows event.
+  const message = [
+    'An account failed to log on.',
+    '',
+    'Logon Type: 3',
+    '',
+    'Account For Which Logon Failed:',
+    ' Account Name: jsmith',
+    '',
+    'Network Information:',
+    ' Source Network Address: 203.0.113.77'
+  ].join('\n');
+
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 6; i++) {
+    rows.push('"4625","not-a-date-' + i + '","-","' + message + '"');
+  }
+  const result = Core.parse(rows.join('\n'));
+  assert(result.ok, 'the file should still parse');
+
+  const analysis = Core.analyse(result);
+  assertEqual(analysis.findings.length, 1, 'the failures should still be reported');
+  const finding = analysis.findings[0];
+  assertEqual(finding.account, 'jsmith', 'the account is still readable from the message');
+  assertEqual(finding.eventCount, 6);
+  assertEqual(finding.firstMs, null, 'no time should be invented');
+  assertIncludes(finding.timeRangeText, 'no readable timestamps', 'the report should say time is unavailable');
+  assertIncludes(finding.notes.join(' '), 'not reliable enough', 'the finding should explain the missing window');
+  assertEqual(finding.sourceIps.join(','), '203.0.113.77', 'the source address is still readable');
+  assertEqual(analysis.stats.windowApplied, false);
+});
+
+test('failures with no account anywhere are counted but not grouped', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 6; i++) {
+    rows.push('"4625","2026-04-07T01:0' + i + ':00","-","An account failed to log on."');
+  }
+  const analysis = Core.analyse(Core.parse(rows.join('\n')));
+  assertEqual(analysis.findings.length, 0, 'grouping unknown accounts together would invent a relationship');
+  assertEqual(analysis.notes.length, 1, 'the limitation should be explained');
+  assertIncludes(analysis.notes[0], 'could not be attributed to an account');
+});
+
+test('a single failed logon never produces a finding', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"',
+    '"4625","2026-04-07T01:00:00","LAB\\jsmith","An account failed to log on."'];
+  const analysis = Core.analyse(Core.parse(rows.join('\n')));
+  assertEqual(analysis.findings.length, 0, 'one failure is ordinary');
+});
+
+test('two separate bursts are described once, not once per window', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  const addBurst = function (hour) {
+    for (let i = 0; i < 5; i++) {
+      rows.push('"4625","2026-04-07T' + hour + ':0' + i + ':00","LAB\\jsmith","An account failed to log on."');
+    }
+  };
+  addBurst('01');
+  addBurst('05');
+
+  const analysis = Core.analyse(Core.parse(rows.join('\n')));
+  assertEqual(analysis.findings.length, 1, 'the same activity must not be reported twice');
+  assertEqual(analysis.findings[0].eventCount, 5, 'the busiest burst is reported');
+  assertIncludes(analysis.findings[0].notes.join(' '), 'further burst', 'the other burst should still be mentioned');
+  assertIncludes(analysis.findings[0].notes.join(' '), 'not duplicated', 'and the reader should be told why');
+});
+
+test('re-running the analysis with the same settings gives the same answer', function () {
+  const result = Core.parse(SAMPLES.mixed.csv);
+  const first = Core.analyse(result, Core.defaultSettings());
+  const second = Core.analyse(result, Core.defaultSettings());
+  assertEqual(second.findings.length, first.findings.length);
+  assertEqual(second.findings[0].id, first.findings[0].id);
+  assertEqual(second.stats.totalFindings, first.stats.totalFindings);
+});
+
+test('the rule can be switched off entirely', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv), {
+    rules: { repeatedFailedLogons: false }
+  });
+  assertEqual(analysis.findings.length, 0, 'a disabled rule must not run');
+});
+
+test('settings are clamped so a typo cannot break the rule', function () {
+  assertEqual(Core.normalizeSettings({ failedLogonThreshold: 0 }).failedLogonThreshold, 2);
+  assertEqual(Core.normalizeSettings({ failedLogonThreshold: -10 }).failedLogonThreshold, 2);
+  assertEqual(Core.normalizeSettings({ failedLogonThreshold: 99999 }).failedLogonThreshold, 1000);
+  assertEqual(Core.normalizeSettings({ failedLogonThreshold: 5.6 }).failedLogonThreshold, 6);
+  assertEqual(Core.normalizeSettings({ failedLogonThreshold: 'abc' }).failedLogonThreshold, 5,
+    'unreadable input should fall back to the default');
+  assertEqual(Core.normalizeSettings({ failedLogonWindowMinutes: 0 }).failedLogonWindowMinutes, 1);
+  assertEqual(Core.normalizeSettings({}).useTimeWindow, true, 'the window is on by default');
+});
+
+test('garbage in the date column never becomes a timestamp', function () {
+  // A real trap worth knowing about: the browser's own date parser reads
+  // "abc-0" as the year 2000 and "abc-1" as 2001, because it treats the trailing
+  // "-0" as a year. An unguarded fallback would invent timestamps out of rubbish,
+  // and the time-window rules would then run on those invented times.
+  ['abc-0', 'abc-1', 'not-a-date-0', 'garbage', '12345'].forEach(function (value) {
+    const analysis = Core.analyzeTimestamp(value);
+    assertEqual(analysis.valid, false, '"' + value + '" must not be turned into a date');
+  });
+
+  // Genuine text dates must still be understood.
+  assertEqual(Core.analyzeTimestamp('Fri Apr 3 14:22:11 2026').valid, true, 'a written date should still parse');
+  assertEqual(Core.analyzeTimestamp('Apr 3, 2026').valid, true, 'a month name should still parse');
+});
+
+test('unreadable dates in a real file leave the timeline unreliable', function () {
+  const rows = ['"Event ID","Date and Time","User"'];
+  for (let i = 0; i < 4; i++) {
+    rows.push('"4624","abc-' + i + '","LAB\\jsmith"');
+  }
+  const result = Core.parse(rows.join('\n'));
+  assertEqual(result.stats.withTimestamp, 0, 'no event should have a usable time');
+  assertEqual(result.stats.timelineReliable, false, 'the timeline must be declared unreliable');
+});
+
+/* --------------------------------------------------------------------------
+   Tests: the findings appear in the page, and settings re-run the analysis
+   -------------------------------------------------------------------------- */
+group('Findings in the page');
+
+test('loading the guessing sample shows a Repeated Failed Logons card', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0]();
+
+  assert(isHidden(page.elements['findings-panel']) === false, 'the findings panel should be shown');
+  assert(isHidden(page.elements['settings-panel']) === false, 'the settings panel should be shown');
+
+  const cards = page.elements['findings-list'].children;
+  assertEqual(cards.length, 1, 'one finding card');
+  const text = textOf(cards[0]);
+  assertIncludes(text, 'Repeated Failed Logons', 'the alert name');
+  assertIncludes(text, 'Severity: Medium', 'the severity');
+  assertIncludes(text, 'jsmith', 'the account');
+  assertIncludes(text, '203.0.113.44', 'the source address');
+  assertIncludes(text, 'Observed activity', 'the observed activity section');
+  assertIncludes(text, 'Why this matters', 'the why-it-matters section');
+  assertIncludes(text, 'Possible benign explanation', 'the benign explanation section');
+  assertIncludes(text, 'Suggested investigation', 'the investigation section');
+  assertIncludes(text, 'Investigation score', 'the score section');
+  assertIncludes(text, '+10', 'the score contribution should be shown');
+  assertIncludes(text, 'not a probability', 'the score must be described honestly');
+  assertIncludes(page.elements['findings-summary'].textContent, '1 finding', 'the summary line');
+});
+
+test('the normal sample shows a calm empty state instead of findings', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+  (page.elements[sampleData.normal.buttonId].listeners.click || [])[0]();
+
+  const cards = page.elements['findings-list'].children;
+  assertEqual(cards.length, 1, 'the empty state is shown as one block');
+  const text = textOf(cards[0]);
+  assertIncludes(text, 'Nothing to escalate', 'the empty state should reassure');
+  assertIncludes(text, 'not proof that nothing happened', 'and it must not overclaim either way');
+});
+
+test('changing the threshold in the form re-runs the analysis immediately', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0]();
+  assertEqual(page.elements['findings-list'].children.length, 1, 'one finding at the default threshold');
+
+  const applyHandler = (page.elements['btn-apply-settings'].listeners.click || [])[0];
+  assert(applyHandler, 'the apply button should be wired up');
+
+  // Raise the threshold above the eight failures.
+  page.elements['setting-threshold'].value = '9';
+  applyHandler();
+  assertIncludes(textOf(page.elements['findings-list'].children[0]), 'Nothing to escalate',
+    'raising the threshold should clear the finding');
+
+  // Lowering it again should bring the finding back.
+  page.elements['setting-threshold'].value = '4';
+  applyHandler();
+  assertIncludes(textOf(page.elements['findings-list'].children[0]), 'Repeated Failed Logons',
+    'the finding should return');
+});
+
+test('Reset Defaults restores the documented values', function () {
+  const page = loadPage();
+
+  page.elements['setting-threshold'].value = '42';
+  page.elements['setting-window'].value = '3';
+  page.elements['setting-use-window'].checked = false;
+  (page.elements['btn-apply-settings'].listeners.click || [])[0]();
+
+  (page.elements['btn-reset-settings'].listeners.click || [])[0]();
+  assertEqual(page.elements['setting-threshold'].value, '5', 'threshold back to 5');
+  assertEqual(page.elements['setting-window'].value, '10', 'window back to 10 minutes');
+  assertEqual(page.elements['setting-use-window'].checked, true, 'the window is on again');
+});
+
+test('the window status explains whether the window can be applied', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0]();
+  assertIncludes(page.elements['window-status'].textContent, 'look reliable', 'a clean file should say so');
+
+  page.elements['setting-use-window'].checked = false;
+  (page.elements['btn-apply-settings'].listeners.click || [])[0]();
+  assertIncludes(page.elements['window-status'].textContent, 'switched off', 'the status should follow the setting');
+});
+
 });
 });
 

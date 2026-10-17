@@ -76,7 +76,9 @@
     fileName: '',
     fileSize: 0,
     isDemo: false,
-    result: null // the object returned by Core.parse()
+    result: null,    // the object returned by Core.parse()
+    settings: null,  // analysis settings, session only
+    analysis: null   // the object returned by Core.analyse()
   };
 
   /* Cached elements */
@@ -90,6 +92,9 @@
       'stat-missing', 'stat-range', 'detected-columns', 'missing-columns', 'missing-note',
       'warning-region', 'warning-list', 'preview-body', 'demo-chip', 'demo-hint', 'demo-info',
       'recognition-body', 'unrecognised-note',
+      'findings-panel', 'findings-summary', 'findings-list', 'analysis-notes', 'analysis-notes-list',
+      'settings-panel', 'setting-threshold', 'setting-window', 'setting-use-window', 'window-status',
+      'btn-apply-settings', 'btn-reset-settings',
       'footer-version',
       'btn-sample-normal', 'btn-sample-guessing', 'btn-sample-privilege', 'btn-sample-mixed'
     ].forEach(function (id) {
@@ -229,6 +234,9 @@
     renderParseSummary(result);
     renderRecognition(result);
     renderPreview(result);
+
+    // Run the detection rules on the freshly parsed data.
+    runAnalysis();
 
     const count = result.stats ? result.stats.events : 0;
     const warningCount = result.warnings.length;
@@ -486,21 +494,231 @@
   }
 
   /* ------------------------------------------------------------------------
+   * Findings
+   * ------------------------------------------------------------------------
+   * Each finding is rendered as a card containing exactly the sections the
+   * specification asks for: what was observed, why it matters, what could
+   * explain it innocently, what to investigate next, and how the priority score
+   * was reached. Every value is written with textContent, so nothing that came
+   * out of the uploaded file can be interpreted as HTML.
+   */
+  function severitySuffix(severity) {
+    switch (severity) {
+      case 'High': return 'high';
+      case 'Medium': return 'medium';
+      case 'Low': return 'low';
+      default: return 'info';
+    }
+  }
+
+  function findingCard(finding) {
+    const card = el('article', 'finding finding--' + severitySuffix(finding.severity));
+    card.setAttribute('aria-label', finding.name + ' for ' + (finding.account || 'an unnamed account'));
+
+    const header = el('div', 'finding__header');
+    header.appendChild(el('h3', 'finding__title', finding.name));
+    const badges = el('div', 'finding__badges');
+    badges.appendChild(el('span', 'badge ' + severityClass(finding.severity), 'Severity: ' + finding.severity));
+    badges.appendChild(el('span', 'badge badge--calm', 'Score ' + finding.score.total));
+    header.appendChild(badges);
+    card.appendChild(header);
+
+    const meta = el('dl', 'finding__meta');
+    const addFact = function (label, value, mono) {
+      meta.appendChild(el('dt', null, label));
+      meta.appendChild(el('dd', mono ? 'mono' : null, value || 'not available'));
+    };
+    addFact('Account', finding.account || 'not named in these events');
+    addFact('Events', finding.eventIds.join(' \u2192 ') + ' (' + plural(finding.eventCount, 'event') + ')', true);
+    addFact('Time range', finding.timeRangeText);
+    addFact('Duration', finding.durationText || 'not applicable');
+    addFact('Source IP', finding.sourceIps.length ? finding.sourceIps.join(', ') : 'not available in these events');
+    addFact('Workstation', finding.workstations.length ? finding.workstations.join(', ') : 'not available in these events');
+    card.appendChild(meta);
+
+    if (finding.severityReasons.length) {
+      const section = el('div', 'finding__section');
+      section.appendChild(el('h4', null, 'Why this priority'));
+      const list = el('ul');
+      finding.severityReasons.forEach(function (reason) {
+        list.appendChild(el('li', 'finding__severity-reason', reason));
+      });
+      section.appendChild(list);
+      card.appendChild(section);
+    }
+
+    const addSection = function (heading, body, ordered) {
+      if (!body || (Array.isArray(body) && !body.length)) return;
+      const section = el('div', 'finding__section');
+      section.appendChild(el('h4', null, heading));
+      if (Array.isArray(body)) {
+        const list = el(ordered ? 'ol' : 'ul');
+        body.forEach(function (item) { list.appendChild(el('li', null, item)); });
+        section.appendChild(list);
+      } else {
+        section.appendChild(el('p', null, body));
+      }
+      card.appendChild(section);
+    };
+
+    addSection('Observed activity', finding.observedActivity);
+    addSection('Why this matters', finding.whyItMatters);
+    addSection('Possible benign explanation', finding.benign);
+    addSection('Suggested investigation', finding.investigation, true);
+
+    if (finding.score.factors.length) {
+      const score = el('div', 'score');
+      score.appendChild(el('p', 'score__title', 'Investigation score - how this was reached'));
+      const list = el('ul', 'score__list');
+      finding.score.factors.forEach(function (factor) {
+        const item = el('li');
+        item.appendChild(el('span', null, factor.label));
+        item.appendChild(el('span', 'score__points', '+' + factor.points));
+        list.appendChild(item);
+      });
+      score.appendChild(list);
+
+      const total = el('div', 'score__total');
+      total.appendChild(el('span', null, 'Total'));
+      total.appendChild(el('span', null, String(finding.score.total)));
+      score.appendChild(total);
+
+      score.appendChild(el('p', 'score__note',
+        'This is an educational way of putting findings in an order. It is not a probability, and it does not mean anything malicious happened.'));
+      card.appendChild(score);
+    }
+
+    if (finding.notes.length) {
+      const notes = el('div', 'finding__section finding__notes');
+      notes.appendChild(el('h4', null, 'Notes on this finding'));
+      const list = el('ul');
+      finding.notes.forEach(function (note) { list.appendChild(el('li', null, note)); });
+      notes.appendChild(list);
+      card.appendChild(notes);
+    }
+
+    return card;
+  }
+
+  /* ------------------------------------------------------------------------
    * Clearing everything
    * ------------------------------------------------------------------------
    * Because nothing is stored, "clearing" really does mean the data is gone:
    * we drop the reference and let the browser reclaim the memory.
    */
+  function renderFindings() {
+    const analysis = state.analysis;
+    if (!analysis || !analysis.ok) return;
+
+    setHidden(dom['findings-panel'], false);
+    setHidden(dom['settings-panel'], false);
+
+    const list = dom['findings-list'];
+    clear(list);
+
+    const summary = dom['findings-summary'];
+    clear(summary);
+
+    if (!analysis.findings.length) {
+      summary.textContent = 'No findings. Every rule ran and nothing reached the current thresholds.';
+      const empty = el('div', 'empty-state');
+      empty.appendChild(el('span', 'empty-state__title', 'Nothing to escalate with these settings'));
+      empty.appendChild(el('span', 'empty-state__text',
+        'That is reassuring, but it is not proof that nothing happened. This tool only sees the events in the file you loaded, '
+        + 'and only the activity its rules look for. Try lowering the failed logon threshold, or load a demo dataset to see what a finding looks like.'));
+      list.appendChild(empty);
+    } else {
+      const stats = analysis.stats;
+      summary.textContent = plural(stats.totalFindings, 'finding') + ' worth a look. Highest priority: '
+        + stats.highestSeverity + '. ' + plural(stats.eventsRequiringInvestigation, 'event')
+        + ' from this file are involved in at least one finding.';
+      analysis.findings.forEach(function (finding) {
+        list.appendChild(findingCard(finding));
+      });
+    }
+
+    const notesRegion = dom['analysis-notes'];
+    const notesList = dom['analysis-notes-list'];
+    clear(notesList);
+    if (analysis.notes.length) {
+      analysis.notes.forEach(function (note) { notesList.appendChild(el('li', null, note)); });
+      setHidden(notesRegion, false);
+    } else {
+      setHidden(notesRegion, true);
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+   * Settings
+   * ------------------------------------------------------------------------
+   * Deliberately session-only: nothing is written to localStorage or cookies, so
+   * a student's thresholds vanish when the tab closes, along with the log data.
+   */
+  function readSettingsFromForm() {
+    const threshold = dom['setting-threshold'] ? Number(dom['setting-threshold'].value) : undefined;
+    const windowMinutes = dom['setting-window'] ? Number(dom['setting-window'].value) : undefined;
+    const useWindow = dom['setting-use-window'] ? !!dom['setting-use-window'].checked : undefined;
+    // Core.normalizeSettings clamps anything silly, so a typo cannot break a rule.
+    return Core.normalizeSettings({
+      failedLogonThreshold: threshold,
+      failedLogonWindowMinutes: windowMinutes,
+      useTimeWindow: useWindow
+    });
+  }
+
+  function writeSettingsToForm(settings) {
+    if (dom['setting-threshold']) dom['setting-threshold'].value = String(settings.failedLogonThreshold);
+    if (dom['setting-window']) dom['setting-window'].value = String(settings.failedLogonWindowMinutes);
+    if (dom['setting-use-window']) dom['setting-use-window'].checked = settings.useTimeWindow;
+    updateWindowStatus();
+  }
+
+  function updateWindowStatus() {
+    const node = dom['window-status'];
+    if (!node) return;
+
+    const useWindow = dom['setting-use-window'] ? !!dom['setting-use-window'].checked : true;
+    const hasData = !!(state.result && state.result.ok);
+    const reliable = hasData && !!state.result.stats.timelineReliable;
+
+    if (!useWindow) {
+      node.textContent = 'The time window is switched off: failures for one account are counted together no matter how far apart they are.';
+    } else if (!hasData) {
+      node.textContent = 'The time window will be applied if the loaded file has reliable timestamps.';
+    } else if (reliable) {
+      node.textContent = 'Timestamps in this file look reliable, so the time window is being applied.';
+    } else {
+      node.textContent = 'Timestamps in this file are missing or ambiguous, so the time window cannot be applied. Failures are counted together instead, and each finding says so.';
+    }
+  }
+
+  function applySettings() {
+    state.settings = readSettingsFromForm();
+    writeSettingsToForm(state.settings);
+    runAnalysis();
+  }
+
+  function runAnalysis() {
+    if (!state.result || !state.result.ok) return;
+    state.analysis = Core.analyse(state.result, state.settings);
+    renderFindings();
+    updateWindowStatus();
+  }
+
+
   function resetAll() {
     state.result = null;
     state.fileName = '';
     state.fileSize = 0;
     state.isDemo = false;
+    state.analysis = null;
 
     if (dom['file-input']) dom['file-input'].value = '';
     setHidden(dom['parse-panel'], true);
     setHidden(dom['file-meta'], true);
     setHidden(dom['warning-region'], true);
+    setHidden(dom['findings-panel'], true);
+    setHidden(dom['settings-panel'], true);
     clearError();
     clear(dom['preview-body']);
     clear(dom['detected-columns']);
@@ -673,6 +891,24 @@
     bindUpload();
 
     if (dom['btn-reset']) dom['btn-reset'].addEventListener('click', resetAll);
+
+    /* Analysis settings. Applied on change and by the button, and re-run against
+     * the data already in memory - the file is never read again. */
+    state.settings = Core.defaultSettings();
+    writeSettingsToForm(state.settings);
+
+    ['setting-threshold', 'setting-window'].forEach(function (id) {
+      if (dom[id]) dom[id].addEventListener('change', applySettings);
+    });
+    if (dom['setting-use-window']) dom['setting-use-window'].addEventListener('change', applySettings);
+    if (dom['btn-apply-settings']) dom['btn-apply-settings'].addEventListener('click', applySettings);
+    if (dom['btn-reset-settings']) {
+      dom['btn-reset-settings'].addEventListener('click', function () {
+        state.settings = Core.defaultSettings();
+        writeSettingsToForm(state.settings);
+        runAnalysis();
+      });
+    }
 
     // The version shown in the footer is taken from the engine, so the two can
     // never disagree.

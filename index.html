@@ -298,6 +298,77 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
   </section>
 
   <!-- ===================================================================
+       Findings
+       =================================================================== -->
+  <section class="panel" id="findings-panel" hidden aria-labelledby="findings-heading">
+    <h2 class="panel__heading" id="findings-heading">
+      <span aria-hidden="true">&#128269;</span> Triage findings
+    </h2>
+    <p class="panel__lede" id="findings-summary"></p>
+
+    <div id="findings-list"></div>
+
+    <div class="notice notice--warn" id="analysis-notes" hidden aria-labelledby="analysis-notes-heading">
+      <h3 class="notice__heading" id="analysis-notes-heading">Notes about this analysis</h3>
+      <ul id="analysis-notes-list"></ul>
+    </div>
+
+    <p class="panel__note">
+      Educational SOC triage tool. Findings indicate activity that may deserve investigation and do
+      not prove malicious behaviour. The investigation score is a way of putting findings in an
+      order &mdash; it is <strong>not</strong> a probability of compromise.
+    </p>
+  </section>
+
+  <!-- ===================================================================
+       Settings
+       =================================================================== -->
+  <section class="panel" id="settings-panel" hidden aria-labelledby="settings-heading">
+    <h2 class="panel__heading" id="settings-heading">
+      <span aria-hidden="true">&#9881;</span> Analysis settings
+    </h2>
+    <p class="panel__lede">
+      Security thresholds vary by environment. These values are educational defaults rather than
+      universal SOC detection rules.
+    </p>
+
+    <div class="settings-grid">
+      <div class="field">
+        <label for="setting-threshold">Failed logon threshold</label>
+        <input type="number" id="setting-threshold" min="2" max="1000" step="1" value="5" inputmode="numeric">
+        <p class="field__hint">
+          How many failed sign-ins for one account count as &ldquo;repeated&rdquo;. Default 5.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="setting-window">Failed logon time window (minutes)</label>
+        <input type="number" id="setting-window" min="1" max="1440" step="1" value="10" inputmode="numeric">
+        <p class="field__hint">
+          How close together the failures must be for a burst. Default 10 minutes.
+        </p>
+      </div>
+    </div>
+
+    <div class="field field--checkbox">
+      <input type="checkbox" id="setting-use-window" checked>
+      <label for="setting-use-window">Apply the time window when timestamps are reliable</label>
+    </div>
+    <p class="field__hint field__hint--indent" id="window-status"></p>
+
+    <div class="settings-actions">
+      <button type="button" class="btn btn--primary" id="btn-apply-settings">Apply settings</button>
+      <button type="button" class="btn btn--ghost" id="btn-reset-settings">Reset Defaults</button>
+    </div>
+
+    <p class="panel__note">
+      Changing these values re-runs the analysis on the data already in your browser. Nothing is
+      re-uploaded, and these settings are forgotten when you close or refresh the tab.
+    </p>
+  </section>
+
+
+  <!-- ===================================================================
        How to think like a SOC analyst (required educational section)
        =================================================================== -->
   <section class="panel" aria-labelledby="soc-heading">
