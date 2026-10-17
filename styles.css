@@ -573,6 +573,12 @@ kbd {
 .data-table td.cell-message { max-width: 380px; overflow-wrap: anywhere; color: var(--text-muted); }
 .data-table tbody tr.row-noteworthy { box-shadow: inset 3px 0 0 var(--accent); }
 
+.data-table--compact { min-width: 620px; }
+.data-table--compact td[scope] { white-space: nowrap; }
+
+.recognition { margin-top: 1rem; }
+.recognition .card__heading { margin-bottom: .3rem; }
+
 .table-empty { padding: 1rem; color: var(--text-muted); font-size: .88rem; }
 
 /* --------------------------------------------------------------------------

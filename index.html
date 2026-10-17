@@ -242,6 +242,31 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
       </div>
     </div>
 
+    <div class="card recognition">
+      <h3 class="card__heading">Event IDs recognised</h3>
+      <p class="card__note">
+        These are the Windows events this version can explain. The priority shown is the
+        attention an event of that type deserves <strong>on its own</strong>, before any
+        correlation with the events around it.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table data-table--compact">
+          <caption class="sr-only">Windows Event IDs found in the loaded file, with their meaning and count</caption>
+          <thead>
+            <tr>
+              <th scope="col">Event ID</th>
+              <th scope="col">What it means</th>
+              <th scope="col">Category</th>
+              <th scope="col">Count</th>
+              <th scope="col">Priority on its own</th>
+            </tr>
+          </thead>
+          <tbody id="recognition-body"></tbody>
+        </table>
+      </div>
+      <p class="card__note" id="unrecognised-note" hidden></p>
+    </div>
+
     <div class="notice notice--warn" id="warning-region" hidden aria-labelledby="warning-heading">
       <h3 class="notice__heading" id="warning-heading">Notes about this file</h3>
       <ul id="warning-list"></ul>

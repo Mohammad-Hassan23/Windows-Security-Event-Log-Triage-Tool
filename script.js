@@ -89,6 +89,7 @@
       'parse-panel', 'stat-events', 'stat-rows', 'stat-skipped', 'stat-columns',
       'stat-missing', 'stat-range', 'detected-columns', 'missing-columns', 'missing-note',
       'warning-region', 'warning-list', 'preview-body', 'demo-chip', 'demo-hint', 'demo-info',
+      'recognition-body', 'unrecognised-note',
       'footer-version',
       'btn-sample-normal', 'btn-sample-guessing', 'btn-sample-privilege', 'btn-sample-mixed'
     ].forEach(function (id) {
@@ -226,6 +227,7 @@
 
     renderFileMeta(result);
     renderParseSummary(result);
+    renderRecognition(result);
     renderPreview(result);
 
     const count = result.stats ? result.stats.events : 0;
@@ -387,6 +389,68 @@
     });
   }
 
+/* ------------------------------------------------------------------------
+   * Event ID recognition table
+   * ------------------------------------------------------------------------
+   * Shows which Windows events the tool understood, what each one means, and the
+   * priority it carries on its own. The "on its own" wording is deliberate: a
+   * 4625 here is Low, and it only becomes interesting once several are seen
+   * together. That distinction is the point of the whole project.
+   */
+  function severityClass(severity) {
+    switch (severity) {
+      case 'High': return 'badge--high';
+      case 'Medium': return 'badge--medium';
+      case 'Low': return 'badge--low';
+      default: return 'badge--info';
+    }
+  }
+
+  function renderRecognition(result) {
+    const body = dom['recognition-body'];
+    if (!body) return;
+    clear(body);
+
+    const stats = result.stats || {};
+    const list = stats.recognisedEventIds || [];
+
+    list.forEach(function (entry) {
+      const tr = el('tr');
+      tr.appendChild(el('td', 'cell-mono', String(entry.eventId)));
+      tr.appendChild(el('td', null, entry.title));
+      tr.appendChild(el('td', null, entry.category));
+      tr.appendChild(el('td', 'cell-mono', String(entry.count)));
+
+      const severityCell = el('td');
+      severityCell.appendChild(el('span', 'badge ' + severityClass(entry.baseSeverity), entry.baseSeverity));
+      tr.appendChild(severityCell);
+
+      body.appendChild(tr);
+    });
+
+    if (!list.length) {
+      const tr = el('tr');
+      const td = el('td', 'table-empty', 'None of the Windows Event IDs this version explains were found in this file.');
+      td.colSpan = 5;
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+
+    /* Unrecognised IDs are counted and shown, never silently dropped. */
+    const note = dom['unrecognised-note'];
+    if (!note) return;
+    const unknown = stats.unrecognisedEventIds || {};
+    const keys = Object.keys(unknown);
+    if (keys.length) {
+      const summary = keys.map(function (id) { return id + ' (x' + unknown[id] + ')'; }).join(', ');
+      note.textContent = plural(stats.unrecognisedEvents, 'event') + ' used '
+        + plural(keys.length, 'Event ID') + ' that this version does not explain yet: ' + summary
+        + '. They are counted in the totals, but not treated as suspicious just because they are unfamiliar.';
+      setHidden(note, false);
+    } else {
+      setHidden(note, true);
+    }
+  }
   /* ------------------------------------------------------------------------
    * Preview table: proof that the file was read the way the student expects
    * ------------------------------------------------------------------------

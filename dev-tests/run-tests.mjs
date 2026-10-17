@@ -762,6 +762,38 @@ test('clicking each demo button loads its dataset and labels it Demo Data', func
   });
 });
 
+/** Collects text from a stub node and its children, like a real browser does. */
+function textOf(node) {
+  let out = node.textContent || '';
+  (node.children || []).forEach(function (child) { out += ' ' + textOf(child); });
+  return out;
+}
+
+test('the recognition table lists the Event IDs found, with their own priority', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+
+  const handler = (page.elements[sampleData.mixed.buttonId].listeners.click || [])[0];
+  handler();
+
+  const rows = page.elements['recognition-body'].children;
+  const result = Core.parse(sampleData.mixed.csv);
+  assertEqual(rows.length, result.stats.recognisedEventIds.length,
+    'one table row per recognised Event ID');
+
+  const firstRowCells = rows[0].children;
+  assertEqual(firstRowCells.length, 5, 'each row should have five cells');
+
+  const texts = rows.map(function (row) { return textOf(row); }).join(' | ');
+  assertIncludes(texts, 'Failed logon', 'the table should explain what a 4625 means');
+  assertIncludes(texts, 'Security audit log cleared', 'the table should include the 1102 event');
+  assertIncludes(texts, 'High', 'the 1102 priority should be shown');
+  assertIncludes(texts, 'Informational', 'the informational priorities should be shown');
+
+  // The unrecognised note stays hidden when every ID is understood.
+  assert(isHidden(page.elements['unrecognised-note']), 'no unknown-ID note is needed for the mixed sample');
+});
+
 test('clearing the loaded data removes the Demo Data labelling', function () {
   const sampleData = require(path.join(root, 'samples/sample-data.js'));
   const page = loadPage();
@@ -957,6 +989,486 @@ test('no demo dataset uses a real-world IP address', function () {
       assert(isPrivate || isDocumentation, address + ' in ' + key + ' is not a private or documentation address');
     });
   });
+/* --------------------------------------------------------------------------
+   Tests: the Event ID catalogue
+   --------------------------------------------------------------------------
+   The catalogue is the reference material shown to the student. These checks
+   keep it complete, keep the wording honest, and make sure severity is never
+   used to imply that an event proves an attack.
+   -------------------------------------------------------------------------- */
+group('Event ID catalogue');
+
+const CATALOGUE_IDS = [4624, 4625, 4688, 4720, 4726, 4728, 4732, 1102, 4104, 7045];
+
+test('all ten specified Event IDs are in the catalogue', function () {
+  CATALOGUE_IDS.forEach(function (id) {
+    assert(Core.isKnownEventId(id), id + ' should be recognised');
+    const info = Core.getEventInfo(id);
+    assertEqual(info.id, id, 'the catalogue entry should carry its own ID');
+  });
+  assertEqual(Object.keys(Core.EVENT_CATALOGUE).length, 10, 'the catalogue should hold exactly ten entries');
+});
+
+test('the base severities are the ones the specification asks for', function () {
+  const expected = {
+    4624: 'Informational',
+    4625: 'Low',
+    4688: 'Informational',
+    4720: 'Medium',
+    4726: 'Low',
+    4728: 'Medium',
+    4732: 'Medium',
+    1102: 'High',
+    4104: 'Informational',
+    7045: 'Medium'
+  };
+  Object.keys(expected).forEach(function (id) {
+    assertEqual(Core.getEventInfo(Number(id)).baseSeverity, expected[id], 'severity for ' + id);
+  });
+});
+
+test('every entry explains itself and offers legitimate explanations', function () {
+  CATALOGUE_IDS.forEach(function (id) {
+    const info = Core.getEventInfo(id);
+    assert(info.title && info.title.length > 5, id + ' needs a plain-English title');
+    assert(info.description && info.description.length > 40, id + ' needs a description');
+    assert(info.whyItMatters && info.whyItMatters.length > 40, id + ' needs to explain why it matters');
+    assert(info.benign && info.benign.length >= 2, id + ' needs at least two benign explanations');
+    assert(info.nextSteps && info.nextSteps.length >= 3, id + ' needs at least three next steps');
+    assert(info.category, id + ' needs a category');
+  });
+});
+
+test('the catalogue never claims that an Event ID is malicious', function () {
+  CATALOGUE_IDS.forEach(function (id) {
+    const info = Core.getEventInfo(id);
+    const text = [info.title, info.description, info.whyItMatters].join(' ').toLowerCase();
+
+    ['malicious', 'compromised', 'is an attack', 'indicates an attack', 'definitely'].forEach(function (word) {
+      assert(text.indexOf(word) === -1,
+        'entry ' + id + ' should not use the phrase "' + word + '" about an event on its own');
+    });
+
+    // The word "prove" is only allowed in a negative construction such as
+    // "its absence proves nothing", which is exactly the honest wording wanted.
+    if (text.indexOf('prove') !== -1) {
+      const negated = text.indexOf('proves nothing') !== -1
+        || text.indexOf('does not prove') !== -1
+        || text.indexOf('do not prove') !== -1
+        || text.indexOf('not prove') !== -1;
+      assert(negated, 'entry ' + id + ' uses "prove" without negating it');
+    }
+  });
+});
+
+test('severity vocabulary is limited to the four allowed levels', function () {
+  CATALOGUE_IDS.forEach(function (id) {
+    const severity = Core.getEventInfo(id).baseSeverity;
+    assert(['Informational', 'Low', 'Medium', 'High'].indexOf(severity) !== -1,
+      id + ' uses severity "' + severity + '", which is outside the agreed vocabulary');
+  });
+});
+
+test('an unknown Event ID is recognised as unknown, not as suspicious', function () {
+  assertEqual(Core.isKnownEventId(9999), false);
+  const result = Core.parse(['"Event ID","Date and Time","Message"', '"9999","2026-04-03T10:00:00","Something happened."'].join('\n'));
+  const event = result.events[0];
+  assertEqual(event.recognised, false, 'the event should be marked unrecognised');
+  assertIncludes(event.title, '9999', 'the title should name the unknown ID');
+  assertEqual(event.category, 'Unrecognised');
+  assertEqual(event.baseSeverity, 'Informational', 'an unfamiliar event must not be treated as serious');
+  assertEqual(result.stats.unrecognisedEvents, 1);
+  assertEqual(result.stats.recognisedEvents, 0);
+});
+/* --------------------------------------------------------------------------
+   Tests: field extraction from real message formats
+   --------------------------------------------------------------------------
+   The fixtures below are written the way Windows actually writes them, including
+   tabs, CRLF line endings, the duplicated "Account Name" label, and a machine
+   account ending in "$".
+   -------------------------------------------------------------------------- */
+group('Field extraction');
+
+/* Parses a single-event CSV and returns that event. */
+function eventFrom(id, message, extra) {
+  const header = '"Event ID","Date and Time","User","Computer","Message"';
+  const row = '"' + id + '","2026-04-03T10:00:00","' + (extra && extra.user ? extra.user : '-')
+    + '","WIN10-LAB01","' + String(message).replace(/"/g, '""') + '"';
+  const result = Core.parse([header, row].join('\r\n'));
+  assert(result.ok, 'the fixture should parse');
+  assert(result.events[0], 'there should be one event');
+  return result.events[0];
+}
+
+/* A faithful 4624: the machine account appears FIRST, in the Subject block. */
+const MESSAGE_4624 =
+  'An account was successfully logged on.\r\n' +
+  '\r\n' +
+  'Subject:\r\n' +
+  '\tSecurity ID:\t\tS-1-5-18\r\n' +
+  '\tAccount Name:\t\tWIN10-LAB01$\r\n' +
+  '\tAccount Domain:\t\tLAB\r\n' +
+  '\r\n' +
+  'Logon Information:\r\n' +
+  '\tLogon Type:\t\t10\r\n' +
+  '\tRestricted Admin Mode:\tNo\r\n' +
+  '\r\n' +
+  'New Logon:\r\n' +
+  '\tSecurity ID:\t\tS-1-5-21-1111-2222-3333-1105\r\n' +
+  '\tAccount Name:\t\tjsmith\r\n' +
+  '\tAccount Domain:\t\tLAB\r\n' +
+  '\r\n' +
+  'Network Information:\r\n' +
+  '\tWorkstation Name:\tWIN10-LAB01\r\n' +
+  '\tSource Network Address:\t192.168.10.25\r\n' +
+  '\tSource Port:\t\t52341';
+
+/* A faithful 4625, with the machine account in Subject and the real target in
+   "Account For Which Logon Failed". */
+const MESSAGE_4625 =
+  'An account failed to log on.\r\n' +
+  '\r\n' +
+  'Subject:\r\n' +
+  '\tSecurity ID:\t\tS-1-5-18\r\n' +
+  '\tAccount Name:\t\tWIN10-LAB01$\r\n' +
+  '\tAccount Domain:\t\tLAB\r\n' +
+  '\r\n' +
+  'Logon Type:\t\t\t3\r\n' +
+  '\r\n' +
+  'Account For Which Logon Failed:\r\n' +
+  '\tSecurity ID:\t\tNULL SID\r\n' +
+  '\tAccount Name:\t\tjsmith\r\n' +
+  '\tAccount Domain:\t\tLAB\r\n' +
+  '\r\n' +
+  'Failure Information:\r\n' +
+  '\tFailure Reason:\t\tUnknown user name or bad password.\r\n' +
+  '\tStatus:\t\t\t0xC000006D\r\n' +
+  '\tSub Status:\t\t0xC000006A\r\n' +
+  '\r\n' +
+  'Network Information:\r\n' +
+  '\tWorkstation Name:\t-\r\n' +
+  '\tSource Network Address:\t203.0.113.44';
+
+test('4624 takes the account from New Logon, not from Subject', function () {
+  const event = eventFrom(4624, MESSAGE_4624);
+  assertEqual(event.account, 'jsmith', 'the account must be the person who signed in');
+  assertEqual(event.fields.accountBlock, 'New Logon', 'the block used must be reported');
+  assert(event.account !== 'WIN10-LAB01$', 'the machine account must never be used as the user');
+  assertEqual(event.accountSource, 'message', 'the message is a better source than the column');
+});
+
+test('4624 extracts the logon type, source address and workstation', function () {
+  const fields = eventFrom(4624, MESSAGE_4624).fields;
+  assertEqual(fields.logonType, '10');
+  assertIncludes(fields.logonTypeText, 'Remote Desktop', 'type 10 should be explained in plain English');
+  assertEqual(fields.sourceIp, '192.168.10.25');
+  assertEqual(fields.sourceIpKind, 'private', '192.168.x.x is a private address');
+  assertEqual(fields.workstation, 'WIN10-LAB01');
+});
+
+test('4625 takes the account from "Account For Which Logon Failed"', function () {
+  const event = eventFrom(4625, MESSAGE_4625);
+  assertEqual(event.account, 'jsmith');
+  assertEqual(event.fields.accountBlock, 'Account For Which Logon Failed');
+  assert(event.account !== 'WIN10-LAB01$', 'the machine account must never be used as the target');
+});
+
+test('4625 explains the failure in plain English', function () {
+  const fields = eventFrom(4625, MESSAGE_4625).fields;
+  assertIncludes(fields.failureReason, 'Unknown user name or bad password', 'the reason should be kept verbatim');
+  assertEqual(fields.statusCode, '0xC000006D');
+  assertIncludes(fields.statusText, 'user name or password was wrong', 'the status should be translated');
+  assertEqual(fields.subStatusCode, '0xC000006A');
+  assertIncludes(fields.subStatusText, 'password was wrong', 'the sub status should be translated');
+test('a machine account is never used as the account when blocks are missing', function () {
+  // Older or unusual exports may have no New Logon block at all. The fallback
+  // takes the LAST "Account Name", which is the user, and declares the fallback.
+  const old = 'An account was successfully logged on.\n\nSubject:\n\tAccount Name:\tWIN10-LAB01$\n\nLogon Type:\t2\n\nAccount Name:\tmgrey';
+  const event = eventFrom(4624, old);
+  assertEqual(event.account, 'mgrey', 'the last account name should win over the machine account');
+  assertEqual(event.fields.accountBlock, 'fallback', 'the fallback must be declared, not hidden');
+});
+
+test('extra spacing and letter case in labels do not matter', function () {
+  const messy = 'Subject:\n  account name : labadmin\n\nNew Logon:\n   ACCOUNT NAME :   temp-admin  ';
+  const fields = Core.extractEventFields({ eventId: 4624, message: messy, sourceIpColumn: '' }).fields;
+  assertEqual(fields.account, 'temp-admin', 'label matching should ignore case and extra spaces');
+});
+
+test('unreadable logon type and status codes are left blank, never guessed', function () {
+  assertEqual(Core.describeLogonType('99'), '', 'an unknown logon type must not be invented');
+  assertEqual(Core.describeLogonType(''), '');
+  assertEqual(Core.describeFailureCode('0xDEADBEEF'), '', 'an unknown status code must not be invented');
+  assertEqual(Core.describeFailureCode(''), '');
+  assertIncludes(Core.describeFailureCode('0xC0000234'), 'locked out', 'a known code should be explained');
+});
+
+test('source address placeholders are labelled rather than treated as addresses', function () {
+  assertEqual(Core.normalizeSourceIp('-').kind, 'unavailable');
+  assertEqual(Core.normalizeSourceIp('').kind, 'unavailable');
+  assertEqual(Core.normalizeSourceIp('::1').kind, 'local');
+  assertEqual(Core.normalizeSourceIp('127.0.0.1').kind, 'local');
+  assertEqual(Core.normalizeSourceIp('0.0.0.0').kind, 'unspecified');
+  assertEqual(Core.normalizeSourceIp('192.168.10.25').kind, 'private');
+  assertEqual(Core.normalizeSourceIp('203.0.113.44').kind, 'routable');
+  assertEqual(Core.normalizeSourceIp('2001:db8::1').kind, 'ipv6');
+  assertEqual(Core.normalizeSourceIp('not-an-address').kind, 'unrecognised');
+  assertIncludes(Core.normalizeSourceIp('::1').label, 'local computer', 'the label should explain the value');
+});
+  assertEqual(fields.logonType, '3');
+  assertIncludes(fields.logonTypeText, 'Network', 'type 3 should be explained');
+/* --------------------------------------------------------------------------
+   Tests: account and privilege events
+   -------------------------------------------------------------------------- */
+group('Account and privilege extraction');
+
+const MESSAGE_4720 =
+  'A user account was created.\r\n\r\n' +
+  'Subject:\r\n\tSecurity ID:\t\tS-1-5-21-1111-2222-3333-1103\r\n\tAccount Name:\t\tlabadmin\r\n\tAccount Domain:\t\tLAB\r\n\r\n' +
+  'New Account:\r\n\tSecurity ID:\t\tS-1-5-21-1111-2222-3333-1150\r\n\tAccount Name:\t\ttemp-admin\r\n\tAccount Domain:\t\tLAB\r\n\r\n' +
+  'Attributes:\r\n\tSAM Account Name:\ttemp-admin\r\n\tUser Account Control:\tAccount Enabled';
+
+const MESSAGE_4726 =
+  'A user account was deleted.\r\n\r\n' +
+  'Subject:\r\n\tAccount Name:\t\tlabadmin\r\n\tAccount Domain:\t\tLAB\r\n\r\n' +
+  'Target Account:\r\n\tAccount Name:\t\ttemp-admin\r\n\tAccount Domain:\t\tLAB';
+
+function groupMessage(groupName, groupDomain, scope) {
+  return 'A member was added to a security-enabled ' + scope + ' group.\r\n\r\n' +
+    'Member:\r\n\tSecurity ID:\t\tS-1-5-21-1111-2222-3333-1150\r\n\tAccount Name:\t\ttemp-admin\r\n\tAccount Domain:\t\tLAB\r\n\r\n' +
+    'Group:\r\n\tGroup Name:\t\t' + groupName + '\r\n\tGroup Domain:\t\t' + groupDomain + '\r\n\r\n' +
+    'Subject:\r\n\tAccount Name:\t\tlabadmin\r\n\tAccount Domain:\t\tLAB';
+}
+
+test('4720 separates the new account from the account that created it', function () {
+  const event = eventFrom(4720, MESSAGE_4720);
+  assertEqual(event.account, 'temp-admin', 'the event is grouped by the account that was created');
+  assertEqual(event.fields.targetAccount, 'temp-admin');
+  assertEqual(event.fields.actor, 'labadmin', 'the actor is the account that made the change');
+  assertEqual(event.fields.accountBlock, 'New Account');
+  assertEqual(event.baseSeverity, 'Medium');
+});
+
+test('4726 separates the deleted account from the account that deleted it', function () {
+  const event = eventFrom(4726, MESSAGE_4726);
+  assertEqual(event.account, 'temp-admin');
+  assertEqual(event.fields.targetAccount, 'temp-admin');
+  assertEqual(event.fields.actor, 'labadmin');
+  assertEqual(event.baseSeverity, 'Low');
+});
+
+test('4732 extracts the member and the local group', function () {
+  const event = eventFrom(4732, groupMessage('Administrators', 'BUILTIN', 'local'));
+  assertEqual(event.fields.memberAccount, 'temp-admin');
+  assertEqual(event.account, 'temp-admin', 'grouping must use the member so a 4720 can be matched');
+  assertEqual(event.fields.groupName, 'Administrators');
+  assertEqual(event.fields.groupDomain, 'BUILTIN');
+  assertEqual(event.fields.actor, 'labadmin');
+  assertEqual(event.fields.groupIsPrivileged, true, 'Administrators is a privileged group');
+});
+
+test('4728 extracts the member and the global group', function () {
+  const event = eventFrom(4728, groupMessage('Domain Admins', 'LAB', 'global'));
+  assertEqual(event.fields.groupName, 'Domain Admins');
+  assertEqual(event.fields.groupIsPrivileged, true);
+  assertIncludes(event.fields.groupReason, 'elevated rights', 'the reason should be explained');
+});
+
+test('an ordinary group is not described as privileged', function () {
+  const event = eventFrom(4732, groupMessage('Users', 'BUILTIN', 'local'));
+  assertEqual(event.fields.groupIsPrivileged, false, 'the Users group must not be treated as privileged');
+  assertIncludes(event.fields.groupReason, 'not in this tool', 'the reasoning should be stated');
+});
+
+test('a group name containing "admin" is flagged as a heuristic, not a fact', function () {
+  const event = eventFrom(4732, groupMessage('LAB-Server-Admins', 'LAB', 'local'));
+  assertEqual(event.fields.groupIsPrivileged, true);
+  assertIncludes(event.fields.groupReason, 'contains "admin"', 'the heuristic must be visible in the wording');
+});
+
+test('1102 names the account that cleared the log', function () {
+  const message = 'The audit log was cleared.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-21-1111-2222-3333-1107\r\n'
+    + '\tAccount Name:\t\tsvc-backup\r\n\tAccount Domain:\t\tLAB\r\n\tLogon ID:\t\t0x1A2B3C';
+  const event = eventFrom(1102, message);
+  assertEqual(event.fields.actor, 'svc-backup');
+  assertEqual(event.account, 'svc-backup');
+  assertEqual(event.fields.accountBlock, 'Subject');
+  assertEqual(event.baseSeverity, 'High', 'a cleared audit log is High priority on its own');
+});
+/* --------------------------------------------------------------------------
+   Tests: process creation, PowerShell and services
+   -------------------------------------------------------------------------- */
+group('Process, script and service extraction');
+
+test('4688 extracts the process, its parent, the command line and the account', function () {
+  const message = 'A new process has been created.\r\n\r\n' +
+    'New Process Name:\tC:\\Windows\\System32\\cmd.exe\r\n' +
+    'Creator Process Name:\tC:\\Windows\\System32\\services.exe\r\n' +
+    'Process Command Line:\tcmd.exe /c net user helpdesk-temp /add\r\n' +
+    'New Process ID:\t0x1f4c\r\n\r\n' +
+    'Subject:\r\n\tAccount Name:\t\tsvc-backup\r\n\tAccount Domain:\t\tLAB';
+  const event = eventFrom(4688, message);
+  assertIncludes(event.fields.process, 'cmd.exe', 'the process name should be extracted');
+  assertIncludes(event.fields.parentProcess, 'services.exe', 'the parent process should be extracted');
+  assertIncludes(event.fields.commandLine, 'net user helpdesk-temp /add', 'the command line should be extracted');
+  assertEqual(event.fields.account, 'svc-backup');
+  assertEqual(event.account, 'svc-backup', 'the process is attributed to the account that ran it');
+  assertEqual(event.baseSeverity, 'Informational', 'process creation is context, not a warning');
+});
+
+test('4688 without command-line auditing says so instead of inventing a command', function () {
+  const message = 'A new process has been created.\r\n\r\n' +
+    'New Process Name:\tC:\\Windows\\System32\\notepad.exe\r\n\r\n' +
+    'Subject:\r\n\tAccount Name:\t\tjsmith';
+  const event = eventFrom(4688, message);
+  assertEqual(event.fields.commandLine, '', 'a missing command line must stay empty');
+  assertIncludes(event.fields.missing.join(', '), 'command line', 'the report should mention what was missing');
+  assertIncludes(event.fields.process, 'notepad.exe', 'the process itself should still be extracted');
+});
+
+test('4104 extracts the script text and keeps PowerShell in proportion', function () {
+  const message = 'Creating Scriptblock text (1 of 1):\r\n' +
+    "Get-Service | Where-Object {$_.Status -eq 'Stopped'}\r\n\r\n" +
+    'ScriptBlock ID: 11111111-2222-3333-4444-5555\r\n' +
+    'Path:\r\n\r\nAccount Name: jsmith';
+  const event = eventFrom(4104, message);
+  assertIncludes(event.fields.scriptText, 'Get-Service', 'the script text should be captured');
+  assertEqual(event.fields.scriptHints.length, 0, 'an ordinary script should not raise hints');
+  assertEqual(event.account, 'jsmith');
+  assertEqual(event.baseSeverity, 'Informational', 'PowerShell must not be treated as suspicious by itself');
+  assertIncludes(event.catalogue.whyItMatters, 'normal administration tool', 'the wording must not blame PowerShell');
+});
+
+test('4104 points out encoded commands without calling them malicious', function () {
+  const message = 'Creating Scriptblock text (1 of 1):\r\n' +
+    'powershell.exe -EncodedCommand R2V0LVNlcnZpY2U=\r\n\r\n' +
+    'ScriptBlock ID: 11111111-2222-3333-4444-6666\r\n' +
+    'Path:\r\n\r\nAccount Name: svc-backup';
+  const event = eventFrom(4104, message);
+  assert(event.fields.scriptHints.length >= 1, 'an encoded command should raise a hint');
+  assertIncludes(event.fields.scriptHints.join(' '), 'EncodedCommand', 'the hint should name the flag');
+  event.fields.scriptHints.forEach(function (hint) {
+    const text = hint.toLowerCase();
+    assert(text.indexOf('malicious') === -1 && text.indexOf('attacker') === -1,
+      'a hint must describe the text, not judge intent: ' + hint);
+  });
+  assertEqual(event.baseSeverity, 'Informational', 'a hint must not raise the severity on its own');
+});
+
+test('7045 extracts the service details', function () {
+  const message = 'A service was installed in the system.\r\n\r\n' +
+    'Service Name:  LabUpdaterSvc\r\n' +
+    'Service File Name:  C:\\ProgramData\\LabUpdater\\updater.exe\r\n' +
+    'Service Type:  user mode service\r\n' +
+    'Service Start Type:  auto start\r\n' +
+    'Service Account:  LocalSystem';
+  const event = eventFrom(7045, message);
+  assertEqual(event.fields.serviceName, 'LabUpdaterSvc');
+  assertIncludes(event.fields.servicePath, 'updater.exe', 'the program the service runs should be extracted');
+  assertEqual(event.fields.serviceType, 'user mode service');
+  assertEqual(event.fields.serviceStartType, 'auto start');
+  assertEqual(event.fields.serviceAccount, 'LocalSystem');
+  assertEqual(event.baseSeverity, 'Medium');
+});
+/* --------------------------------------------------------------------------
+   Tests: nothing is ever invented
+   -------------------------------------------------------------------------- */
+group('No invented values');
+
+test('a message with no readable structure leaves every field empty', function () {
+  const event = eventFrom(4624, 'An account was successfully logged on.');
+  assertEqual(event.account, '', 'no account should be invented');
+  assertEqual(event.accountSource, 'none');
+  assertEqual(event.fields.logonType, '');
+  assertEqual(event.fields.sourceIp, '');
+  assertEqual(event.fields.sourceIpKind, 'unavailable');
+  assertEqual(event.fields.workstation, '');
+  assertIncludes(event.fields.missing.join(', '), 'account name', 'the gap should be reported');
+});
+
+test('an empty message does not break anything', function () {
+  const event = eventFrom(4624, '');
+  assertEqual(event.account, '');
+  assertEqual(event.sectionsParsed, 0);
+  assert(event.fields.missing.length > 0, 'missing fields should still be listed');
+});
+
+test('the account falls back to the CSV column only when the message has none', function () {
+  const event = eventFrom(4720, 'A user account was created.', { user: 'LAB\\labadmin' });
+  assertEqual(event.account, 'labadmin', 'the column is a valid fallback');
+  assertEqual(event.accountSource, 'column', 'and the report should say where it came from');
+  assertEqual(event.accountFromColumn, 'labadmin');
+});
+
+test('a source address is never read from an unrelated field', function () {
+  const event = eventFrom(4720, MESSAGE_4720);
+  assertEqual(event.fields.sourceIp, '', 'account creation events have no source address');
+  assertEqual(event.fields.sourceIpKind, 'unavailable');
+});
+
+test('a dedicated source address column is used only as a last resort', function () {
+  const header = '"Event ID","Date and Time","SourceIP","Message"';
+  const row = '"4625","2026-04-03T10:00:00","203.0.113.9","An account failed to log on."';
+  const event = Core.parse([header, row].join('\n')).events[0];
+  assertEqual(event.fields.sourceIp, '203.0.113.9', 'the column should be used when the message has nothing');
+  assertEqual(event.fields.sourceIpKind, 'routable');
+});
+
+test('message section parsing survives odd and hostile input', function () {
+  assertEqual(Core.parseMessageSections('').sections.length, 0);
+  assertEqual(Core.parseMessageSections(null).blank, true);
+  assertEqual(Core.parseMessageSections('Subject:').sections.length, 2, 'a bare heading is still a section');
+  const weird = Core.parseMessageSections(':  leading colon\nNoColonHere\nA: b: c');
+  assert(weird.sections.length >= 1, 'odd lines must not throw');
+  assertEqual(Core.labelAnywhere(weird, 'a'), 'b: c', 'only the first colon separates label from value');
+});
+
+test('every sample dataset resolves its accounts from the messages', function () {
+  const expectations = {
+    normal: { withMessage: 12, total: 15 },
+    guessing: { withMessage: 9, total: 9 },
+    persistence: { withMessage: 4, total: 4 },
+    mixed: { withMessage: 14, total: 15 }
+  };
+  Object.keys(expectations).forEach(function (key) {
+    const result = Core.parse(SAMPLES[key].csv);
+    const expected = expectations[key];
+    assertEqual(result.stats.accountsFoundInMessage, expected.withMessage,
+      key + ' should resolve accounts from message text');
+    assertEqual(result.stats.eventsWithAccount, expected.total,
+      key + ' should end up with an account for every event');
+  });
+});
+
+test('the mixed dataset extraction matches the story it is meant to tell', function () {
+  const events = Core.parse(SAMPLES.mixed.csv).events;
+
+  const created = events.filter(function (e) { return e.eventId === 4720; })[0];
+  assertEqual(created.account, 'helpdesk-temp', 'the created account');
+  assertEqual(created.fields.actor, 'svc-backup', 'the account that created it');
+
+  const added = events.filter(function (e) { return e.eventId === 4732; })[0];
+  assertEqual(added.account, 'helpdesk-temp', 'the same account must be used for correlation');
+  assertEqual(added.fields.groupName, 'Administrators');
+  assertEqual(added.fields.groupIsPrivileged, true);
+
+  const cleared = events.filter(function (e) { return e.eventId === 1102; })[0];
+  assertEqual(cleared.fields.actor, 'svc-backup');
+
+  const service = events.filter(function (e) { return e.eventId === 7045; })[0];
+  assertEqual(service.fields.serviceName, 'LabUpdaterSvc');
+
+  const script = events.filter(function (e) { return e.eventId === 4104; })[0];
+  assert(script.fields.scriptHints.length >= 1, 'the encoded script should be highlighted');
+
+  const failures = events.filter(function (e) { return e.eventId === 4625; });
+  failures.forEach(function (failure) {
+    assertEqual(failure.account, 'svc-backup', 'every failure should name the same account');
+    assertIncludes(failure.fields.logonTypeText, 'Network', 'the sample failures are network logons');
+    assertEqual(failure.fields.sourceIp, '198.51.100.23');
+  });
+});
+});
 });
 
 
