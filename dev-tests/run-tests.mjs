@@ -771,6 +771,23 @@ function textOf(node) {
   return out;
 }
 
+/**
+ * The title of a finding card. Needed because a card's BODY can mention another
+ * finding's name (the cross-references do exactly that), so searching the whole
+ * card for a name would match more than the card that is actually about it.
+ */
+function cardTitle(card) {
+  const header = (card.children || [])[0];
+  const title = header && (header.children || [])[0];
+  return title ? String(title.textContent) : '';
+}
+
+function cardsTitled(page, title) {
+  return page.elements['findings-list'].children.filter(function (card) {
+    return cardTitle(card) === title;
+  });
+}
+
 test('the recognition table lists the Event IDs found, with their own priority', function () {
   const sampleData = require(path.join(root, 'samples/sample-data.js'));
   const page = loadPage();
@@ -1538,15 +1555,16 @@ test('the threshold is configurable and changes the outcome', function () {
   // silent; if a student lowers it to 2 the tool should say something.
   assertEqual(Core.analyse(normal, { failedLogonThreshold: 5 }).findings.length, 0);
   const strict = Core.analyse(normal, { failedLogonThreshold: 2 });
-  assertEqual(strict.findings.length, 1, 'a threshold of 2 should catch the two failures');
-  assertEqual(strict.findings[0].account, 'mgrey');
-  assertEqual(strict.findings[0].eventCount, 2);
+  const repeated = findingsNamed(strict, 'Repeated Failed Logons');
+  assertEqual(repeated.length, 1, 'a threshold of 2 should catch the two failures');
+  assertEqual(repeated[0].account, 'mgrey');
+  assertEqual(repeated[0].eventCount, 2);
 
   // And raising it above the sample's failure count silences the guessing sample.
   const guessing = Core.parse(SAMPLES.guessing.csv);
-  assertEqual(Core.analyse(guessing, { failedLogonThreshold: 9 }).findings.length, 0,
+  assertEqual(findingsNamed(Core.analyse(guessing, { failedLogonThreshold: 9 }), 'Repeated Failed Logons').length, 0,
     'eight failures must not trigger a threshold of nine');
-  assertEqual(Core.analyse(guessing, { failedLogonThreshold: 8 }).findings.length, 1,
+  assertEqual(findingsNamed(Core.analyse(guessing, { failedLogonThreshold: 8 }), 'Repeated Failed Logons').length, 1,
     'eight failures should trigger a threshold of exactly eight');
 });
 
@@ -1556,15 +1574,14 @@ test('the time window is configurable and changes the outcome', function () {
   // The eight attempts span 4 minutes 13 seconds, so a one-minute window finds no
   // burst at all: the tool should say so and lower the priority rather than
   // pretending a burst happened.
-  const tight = Core.analyse(guessing, { failedLogonWindowMinutes: 1 });
-  assertEqual(tight.findings.length, 1, 'the failures are still worth reporting');
-  assertEqual(tight.findings[0].severity, 'Low', 'a slow trickle is a lower priority than a burst');
-  assertIncludes(tight.findings[0].severityReasons.join(' '), 'spread out', 'the reason should be stated');
+  const tight = findingsNamed(Core.analyse(guessing, { failedLogonWindowMinutes: 1 }), 'Repeated Failed Logons')[0];
+  assertEqual(tight.severity, 'Low', 'a slow trickle is a lower priority than a burst');
+  assertIncludes(tight.severityReasons.join(' '), 'spread out', 'the reason should be stated');
 
   // A five-minute window contains all eight attempts.
-  const wide = Core.analyse(guessing, { failedLogonWindowMinutes: 5 });
-  assertEqual(wide.findings[0].severity, 'Medium');
-  assertEqual(wide.findings[0].eventCount, 8, 'all eight attempts fall inside five minutes');
+  const wide = findingsNamed(Core.analyse(guessing, { failedLogonWindowMinutes: 5 }), 'Repeated Failed Logons')[0];
+  assertEqual(wide.severity, 'Medium');
+  assertEqual(wide.eventCount, 8, 'all eight attempts fall inside five minutes');
 });
 
 test('switching the time window off counts failures together and says so', function () {
@@ -1572,7 +1589,7 @@ test('switching the time window off counts failures together and says so', funct
     useTimeWindow: false,
     failedLogonWindowMinutes: 1
   });
-  const finding = analysis.findings[0];
+  const finding = findingsNamed(analysis, 'Repeated Failed Logons')[0];
   assertEqual(finding.severity, 'Medium', 'with no window the count itself is the alert');
   assertIncludes(finding.severityReasons.join(' '), 'switched off', 'the reason must not be hidden');
   assertIncludes(finding.notes.join(' '), 'switched off in the settings', 'the finding should explain itself');
@@ -1661,7 +1678,12 @@ test('the rule can be switched off entirely', function () {
   const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv), {
     rules: { repeatedFailedLogons: false }
   });
-  assertEqual(analysis.findings.length, 0, 'a disabled rule must not run');
+  assertEqual(findingsNamed(analysis, 'Repeated Failed Logons').length, 0,
+    'the disabled rule must not produce its finding');
+  // The other authentication rule still runs, which is correct: switching one
+  // detection off must not silently disable the rest.
+  assertEqual(findingsNamed(analysis, 'Possible Password Guessing Followed By Success').length, 1,
+    'the other rule should be unaffected');
 });
 
 test('settings are clamped so a typo cannot break the rule', function () {
@@ -1714,8 +1736,8 @@ test('loading the guessing sample shows a Repeated Failed Logons card', function
   assert(isHidden(page.elements['findings-panel']) === false, 'the findings panel should be shown');
   assert(isHidden(page.elements['settings-panel']) === false, 'the settings panel should be shown');
 
-  const cards = page.elements['findings-list'].children;
-  assertEqual(cards.length, 1, 'one finding card');
+  const cards = cardsTitled(page, 'Repeated Failed Logons');
+  assertEqual(cards.length, 1, 'the repeated-failed-logons card should be present exactly once');
   const text = textOf(cards[0]);
   assertIncludes(text, 'Repeated Failed Logons', 'the alert name');
   assertIncludes(text, 'Severity: Medium', 'the severity');
@@ -1728,7 +1750,8 @@ test('loading the guessing sample shows a Repeated Failed Logons card', function
   assertIncludes(text, 'Investigation score', 'the score section');
   assertIncludes(text, '+10', 'the score contribution should be shown');
   assertIncludes(text, 'not a probability', 'the score must be described honestly');
-  assertIncludes(page.elements['findings-summary'].textContent, '1 finding', 'the summary line');
+  assertIncludes(page.elements['findings-summary'].textContent, '2 findings', 'the summary line counts both findings');
+  assertIncludes(page.elements['findings-summary'].textContent, 'Highest priority: High', 'and reports the top priority');
 });
 
 test('the normal sample shows a calm empty state instead of findings', function () {
@@ -1748,7 +1771,8 @@ test('changing the threshold in the form re-runs the analysis immediately', func
   const page = loadPage();
 
   (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0]();
-  assertEqual(page.elements['findings-list'].children.length, 1, 'one finding at the default threshold');
+  assertEqual(cardsTitled(page, 'Repeated Failed Logons').length, 1,
+    'one repeated-failed-logons finding at the default threshold');
 
   const applyHandler = (page.elements['btn-apply-settings'].listeners.click || [])[0];
   assert(applyHandler, 'the apply button should be wired up');
@@ -1756,14 +1780,13 @@ test('changing the threshold in the form re-runs the analysis immediately', func
   // Raise the threshold above the eight failures.
   page.elements['setting-threshold'].value = '9';
   applyHandler();
-  assertIncludes(textOf(page.elements['findings-list'].children[0]), 'Nothing to escalate',
-    'raising the threshold should clear the finding');
+  assertEqual(cardsTitled(page, 'Repeated Failed Logons').length, 0,
+    'raising the threshold should clear that finding');
 
   // Lowering it again should bring the finding back.
   page.elements['setting-threshold'].value = '4';
   applyHandler();
-  assertIncludes(textOf(page.elements['findings-list'].children[0]), 'Repeated Failed Logons',
-    'the finding should return');
+  assertEqual(cardsTitled(page, 'Repeated Failed Logons').length, 1, 'the finding should return');
 });
 
 test('Reset Defaults restores the documented values', function () {
@@ -1792,6 +1815,325 @@ test('the window status explains whether the window can be applied', function ()
   assertIncludes(page.elements['window-status'].textContent, 'switched off', 'the status should follow the setting');
 });
 
+/* --------------------------------------------------------------------------
+   Tests: RULE 2 - failed logons followed by a successful sign-in
+   --------------------------------------------------------------------------
+   The synthetic files below are built from realistic message text so that each
+   variation - matching address, different address, no address, no timestamps -
+   can be tested on its own.
+   -------------------------------------------------------------------------- */
+group('Rule 2: failed logons followed by success');
+
+function authMessage(kind, account, sourceIp, workstation, logonType) {
+  if (kind === 'failed') {
+    return [
+      'An account failed to log on.',
+      '',
+      'Subject:',
+      ' Account Name: WIN10-LAB01$',
+      '',
+      'Logon Type: ' + logonType,
+      '',
+      'Account For Which Logon Failed:',
+      ' Account Name: ' + (account || ''),
+      '',
+      'Failure Information:',
+      ' Failure Reason: Unknown user name or bad password.',
+      ' Status: 0xC000006D',
+      ' Sub Status: 0xC000006A',
+      '',
+      'Network Information:',
+      ' Workstation Name: ' + (workstation || '-'),
+      ' Source Network Address: ' + (sourceIp || '-')
+    ].join('\n');
+  }
+  return [
+    'An account was successfully logged on.',
+    '',
+    'Subject:',
+    ' Account Name: WIN10-LAB01$',
+    '',
+    'Logon Information:',
+    ' Logon Type: ' + logonType,
+    '',
+    'New Logon:',
+    ' Account Name: ' + (account || ''),
+    '',
+    'Network Information:',
+    ' Workstation Name: ' + (workstation || '-'),
+    ' Source Network Address: ' + (sourceIp || '-')
+  ].join('\n');
+}
+
+/**
+ * Builds a CSV with a burst of failures and a later successful sign-in.
+ * Every option has a default, so a test only states what it is changing.
+ */
+function buildAuthCsv(options) {
+  const settings = options || {};
+  const failureCount = settings.failures === undefined ? 6 : settings.failures;
+  const account = settings.account === undefined ? 'jsmith' : settings.account;
+  const failureIp = settings.failureIp === undefined ? '203.0.113.44' : settings.failureIp;
+  const successIp = settings.successIp === undefined ? failureIp : settings.successIp;
+  const failureWs = settings.failureWs === undefined ? '-' : settings.failureWs;
+  const successWs = settings.successWs === undefined ? '-' : settings.successWs;
+  const successTime = settings.successTime || '2026-04-07T02:08:00';
+  const datePrefix = settings.datePrefix === undefined ? '2026-04-07T02:0' : settings.datePrefix;
+  const successUser = settings.successUser === undefined ? account : settings.successUser;
+
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < failureCount; i++) {
+    rows.push('"4625","' + datePrefix + i + ':00","-","' + authMessage('failed', account, failureIp, failureWs, '3') + '"');
+  }
+  if (successTime !== null) {
+    rows.push('"4624","' + successTime + '","LAB\\' + (successUser || '') + '","'
+      + authMessage('success', successUser, successIp, successWs, '10') + '"');
+  }
+  return rows.join('\n');
+}
+
+function rule2Findings(csv, settings) {
+  const analysis = Core.analyse(Core.parse(csv), settings);
+  return analysis.findings.filter(function (f) { return f.rule === 'failedLogonsFollowedBySuccess'; });
+}
+
+const RULE2_NAME = 'Possible Password Guessing Followed By Success';
+
+test('the password guessing sample triggers the High severity finding', function () {
+  const findings = rule2Findings(SAMPLES.guessing.csv);
+  assertEqual(findings.length, 1, 'exactly one finding for this sample');
+
+  const finding = findings[0];
+  assertEqual(finding.name, RULE2_NAME);
+  assertEqual(finding.severity, 'High');
+  assertEqual(finding.account, 'jsmith');
+  assertEqual(finding.eventCount, 9, 'eight failures and the successful sign-in');
+  assertEqual(finding.eventIds.join(','), '4625,4624');
+  assertIncludes(finding.sourceIps.join(','), '203.0.113.44');
+});
+
+test('the sequence is chronological, complete and timestamped', function () {
+  const finding = rule2Findings(SAMPLES.guessing.csv)[0];
+  assertEqual(finding.sequence.length, 9, 'eight failures then the success');
+  assertEqual(finding.sequence[0].eventId, 4625, 'the sequence starts with a failure');
+  assertEqual(finding.sequence[8].eventId, 4624, 'and ends with the successful sign-in');
+  assertEqual(finding.sequence[0].iso, '2026-04-07 02:14:02');
+  assertEqual(finding.sequence[8].iso, '2026-04-07 02:21:44');
+  assertEqual(finding.sequence[8].kind, 'successful sign-in');
+
+  for (let i = 1; i < finding.sequence.length; i++) {
+    assert(finding.sequence[i].ms > finding.sequence[i - 1].ms,
+      'sequence step ' + i + ' should be later than the previous one');
+  }
+
+  assertIncludes(finding.sequenceText, '4625 \u2192 4625', 'the arrow chain should be shown');
+  assertIncludes(finding.sequenceText, '\u2192 4624', 'and should end with the success');
+  assertIncludes(finding.observedActivity, '8 failed sign-in attempts', 'the failed count should be stated');
+  assertIncludes(finding.observedActivity, '3m 29s after the last failed attempt', 'the gap should be stated');
+});
+
+test('a matching source address is reported as a match', function () {
+  const finding = rule2Findings(buildAuthCsv({}))[0];
+  const ip = finding.comparisons.filter(function (c) { return c.label === 'Source address'; })[0];
+  assertEqual(ip.status, 'match');
+  assertIncludes(ip.text, 'same source address', 'the wording should be plain');
+  assertIncludes(ip.text, '203.0.113.44');
+  assertEqual(finding.severity, 'High', 'a matching address is the stronger correlation');
+});
+
+test('differing source addresses are reported and the priority is lowered', function () {
+  const finding = rule2Findings(buildAuthCsv({ failureIp: '203.0.113.44', successIp: '10.0.0.5' }))[0];
+  const ip = finding.comparisons.filter(function (c) { return c.label === 'Source address'; })[0];
+  assertEqual(ip.status, 'differ');
+  assertIncludes(ip.text, 'do not match', 'the mismatch must be stated plainly');
+  assertIncludes(ip.text, '203.0.113.44');
+  assertIncludes(ip.text, '10.0.0.5');
+  assertEqual(finding.severity, 'Medium', 'a mismatch must not be reported as the strongest correlation');
+  assertIncludes(finding.severityReasons.join(' '), 'different address', 'the reason must be visible');
+});
+
+test('a missing source address is reported as undetermined, never as a match', function () {
+  const finding = rule2Findings(buildAuthCsv({ failureIp: '', successIp: '' }))[0];
+  const ip = finding.comparisons.filter(function (c) { return c.label === 'Source address'; })[0];
+  assertEqual(ip.status, 'unknown');
+  assertIncludes(ip.text, 'cannot be compared', 'the tool must not imply the sources matched');
+  assertEqual(finding.sourceIps.length, 0, 'no address should be invented');
+  assertIncludes(finding.severityReasons.join(' '), 'could not be compared', 'the limitation should be stated');
+});
+
+test('workstations are compared separately from addresses', function () {
+  const finding = rule2Findings(buildAuthCsv({ failureWs: 'KALI-BOX', successWs: 'WIN10-LAB01' }))[0];
+  const address = finding.comparisons.filter(function (c) { return c.label === 'Source address'; })[0];
+  const workstation = finding.comparisons.filter(function (c) { return c.label === 'Workstation'; })[0];
+  assertEqual(address.status, 'match', 'the addresses match in this fixture');
+  assertEqual(workstation.status, 'differ', 'but the workstations do not');
+  assertIncludes(workstation.text, 'KALI-BOX');
+});
+test('the normal sample stays free of this alert at the default settings', function () {
+  assertEqual(rule2Findings(SAMPLES.normal.csv).length, 0,
+    'two mistyped passwords followed by a success must not be escalated at the default threshold');
+  assertEqual(rule2Findings(SAMPLES.persistence.csv).length, 0, 'and the privilege sample has no failures at all');
+
+  // Lowering the threshold is the student's choice, and then it should fire -
+  // that is the threshold doing its job, not a false positive.
+  const strict = rule2Findings(SAMPLES.normal.csv, { failedLogonThreshold: 2 });
+  assertEqual(strict.length, 1, 'at a threshold of 2 the two mgrey failures and the sign-in are correlated');
+  assertEqual(strict[0].account, 'mgrey');
+  assertEqual(strict[0].severity, 'High', 'the sources match in that sample');
+});
+
+test('too few failures are never correlated with a success', function () {
+  assertEqual(rule2Findings(buildAuthCsv({ failures: 4 })).length, 0,
+    'four failures are below the default threshold of five');
+  assertEqual(rule2Findings(buildAuthCsv({ failures: 5 })).length, 1,
+    'five failures reach the threshold');
+});
+
+test('a successful sign-in that comes BEFORE the failures is not correlated', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"',
+    '"4624","2026-04-07T01:00:00","LAB\\jsmith","' + authMessage('success', 'jsmith', '203.0.113.44', '-', '10') + '"'];
+  for (let i = 0; i < 6; i++) {
+    rows.push('"4625","2026-04-07T02:0' + i + ':00","-","' + authMessage('failed', 'jsmith', '203.0.113.44', '-', '3') + '"');
+  }
+  assertEqual(rule2Findings(rows.join('\n')).length, 0,
+    'the rule looks for failures followed by a success, not the other way round');
+});
+
+test('unrelated accounts are never correlated with each other', function () {
+  // Five failures for alice, and a success for bob.
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 5; i++) {
+    rows.push('"4625","2026-04-07T02:0' + i + ':00","-","' + authMessage('failed', 'alice', '203.0.113.44', '-', '3') + '"');
+  }
+  rows.push('"4624","2026-04-07T02:08:00","LAB\\bob","' + authMessage('success', 'bob', '203.0.113.44', '-', '10') + '"');
+  assertEqual(rule2Findings(rows.join('\n')).length, 0, 'a different account must never be paired up');
+
+  // Three failures each for alice and bob, plus a success for alice: neither
+  // account reaches the threshold, so there is nothing to correlate.
+  const split = ['"Event ID","Date and Time","User","Message"'];
+  ['alice', 'bob'].forEach(function (name) {
+    for (let i = 0; i < 3; i++) {
+      split.push('"4625","2026-04-07T02:0' + i + ':00","-","' + authMessage('failed', name, '203.0.113.44', '-', '3') + '"');
+    }
+  });
+  split.push('"4624","2026-04-07T02:09:00","LAB\\alice","' + authMessage('success', 'alice', '203.0.113.44', '-', '10') + '"');
+  assertEqual(rule2Findings(split.join('\n')).length, 0, 'three failures per account is below the threshold');
+});
+
+test('missing timestamps fall back to file order and say so', function () {
+  const csv = buildAuthCsv({ datePrefix: 'not-a-date-', successTime: 'also-not-a-date' });
+  const findings = rule2Findings(csv);
+  assertEqual(findings.length, 1, 'the sequence should still be found from the order of the rows');
+
+  const finding = findings[0];
+  assertEqual(finding.firstMs, null, 'no time should be invented');
+  assertEqual(finding.sequence[0].iso, '', 'sequence steps should have no invented time');
+  // Without timestamps only the failures in the file are used, so the length is
+  // not guaranteed to be 9; the sequence still has to END with the success.
+  assertEqual(finding.sequence[finding.sequence.length - 1].eventId, 4624, 'the order still ends with the success');
+  assertIncludes(finding.notes.join(' '), 'order of the rows', 'the assumption must be stated');
+  assertEqual(finding.severity, 'Medium', 'without a time window the correlation is weaker');
+  assertIncludes(finding.severityReasons.join(' '), 'could not be placed inside a single time window', 'the reason is shown');
+});
+
+test('a success with no account anywhere produces no correlation', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 6; i++) {
+    rows.push('"4625","2026-04-07T02:0' + i + ':00","-","An account failed to log on."');
+  }
+  rows.push('"4624","2026-04-07T02:09:00","-","An account was successfully logged on."');
+  assertEqual(rule2Findings(rows.join('\n')).length, 0,
+    'without an account there is nothing to correlate, and guessing would invent evidence');
+});
+
+test('two successful sign-ins after the failures are described once', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 6; i++) {
+    rows.push('"4625","2026-04-07T02:0' + i + ':00","-","' + authMessage('failed', 'jsmith', '203.0.113.44', '-', '3') + '"');
+  }
+  rows.push('"4624","2026-04-07T02:08:00","LAB\\jsmith","' + authMessage('success', 'jsmith', '203.0.113.44', '-', '10') + '"');
+  rows.push('"4624","2026-04-07T02:09:30","LAB\\jsmith","' + authMessage('success', 'jsmith', '203.0.113.44', '-', '10') + '"');
+
+  const findings = rule2Findings(rows.join('\n'));
+  assertEqual(findings.length, 1, 'the same sequence must not be reported twice');
+  assertEqual(findings[0].sequence[findings[0].sequence.length - 1].iso, '2026-04-07 02:08:00',
+    'the earliest successful sign-in is the one described');
+  assertIncludes(findings[0].notes.join(' '), 'further 1 successful sign-in', 'the other success is still mentioned');
+});
+
+test('the score is explainable and never presented as a probability', function () {
+  const finding = rule2Findings(SAMPLES.guessing.csv)[0];
+  assertEqual(finding.score.total, 30, 'ten for the repeated failures plus twenty for the success');
+  assertEqual(finding.score.factors.length, 2, 'both contributions are itemised');
+  assertEqual(finding.score.factors[0].points, 10);
+  assertEqual(finding.score.factors[1].points, 20);
+  assertIncludes(finding.score.factors[1].label, 'successful sign-in following the failures', 'the documented wording');
+
+  const allText = [finding.observedActivity, finding.whyItMatters, finding.benign, finding.severityReasons.join(' ')].join(' ');
+  assertEqual(allText.indexOf('%'), -1, 'no percentage should appear anywhere in the finding');
+  assertEqual(allText.toLowerCase().indexOf('probability'), -1, 'and it must not be described as a probability');
+  assertEqual(allText.toLowerCase().indexOf('malicious'), -1, 'and no event should be called malicious');
+});
+
+test('the finding explains itself, offers a benign explanation and next steps', function () {
+  const finding = rule2Findings(SAMPLES.guessing.csv)[0];
+  assertIncludes(finding.whyItMatters, 'guessed', 'the reason this pattern matters');
+  assertIncludes(finding.whyItMatters, 'legitimate user', 'and the honest counter-possibility');
+  assertIncludes(finding.benign, 'wrong password', 'the benign explanation should be concrete');
+  assertIncludes(finding.benign, 'got it right', 'including the most likely everyday cause');
+  assert(finding.investigation.length >= 5, 'several investigation steps');
+  assertIncludes(finding.investigation.join(' '), 'source address', 'starting with the source address');
+});
+
+test('the two authentication findings point at each other', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv));
+  const repeated = analysis.findings.filter(function (f) { return f.rule === 'repeatedFailedLogons'; })[0];
+  const sequence = analysis.findings.filter(function (f) { return f.rule === 'failedLogonsFollowedBySuccess'; })[0];
+
+  assertIncludes(sequence.crossReferences.join(' '), 'Repeated Failed Logons',
+    'the sequence finding should reference the failure finding');
+  assertIncludes(sequence.crossReferences.join(' '), 'same activity',
+    'and should explain that the two describe the same activity');
+  assertIncludes(repeated.crossReferences.join(' '), RULE2_NAME,
+    'and the failure finding should reference the sequence finding');
+});
+
+test('the rule can be switched off on its own', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv), {
+    rules: { failedLogonsFollowedBySuccess: false }
+  });
+  assertEqual(analysis.findings.filter(function (f) { return f.rule === 'failedLogonsFollowedBySuccess'; }).length, 0);
+  assertEqual(analysis.findings.filter(function (f) { return f.rule === 'repeatedFailedLogons'; }).length, 1,
+    'the other rule still runs');
+});
+
+test('the sequence finding is the highest priority one in the guessing sample', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.guessing.csv));
+  assertEqual(analysis.findings[0].name, RULE2_NAME, 'sorted by severity, so High comes first');
+  assertEqual(analysis.stats.highestSeverity, 'High');
+  assertEqual(analysis.stats.bySeverity.High, 1);
+  assertEqual(analysis.stats.bySeverity.Medium, 1);
+});
+
+test('the page shows the sequence and the source comparison', function () {
+  const sampleData = require(path.join(root, 'samples/sample-data.js'));
+  const page = loadPage();
+  (page.elements[sampleData.guessing.buttonId].listeners.click || [])[0]();
+
+  const cards = cardsTitled(page, RULE2_NAME);
+  assertEqual(cards.length, 1, 'the sequence card should be present once');
+
+  const text = textOf(cards[0]);
+  assertIncludes(text, 'Severity: High', 'the High severity badge');
+  assertIncludes(text, 'Sequence of events', 'the sequence section');
+  assertIncludes(text, '4625 \u2192 4625', 'the arrow chain');
+  assertIncludes(text, '2026-04-07 02:14:02', 'the timestamps');
+  assertIncludes(text, 'Do the sources match?', 'the comparison section');
+  assertIncludes(text, 'Same', 'the match badge');
+  assertIncludes(text, 'same source address', 'the comparison explanation');
+  assertIncludes(text, 'Related findings', 'the cross-reference section');
+  assertIncludes(text, 'not a probability', 'the score disclaimer');
+});
 });
 });
 

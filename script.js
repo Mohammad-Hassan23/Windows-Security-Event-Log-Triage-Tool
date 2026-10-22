@@ -511,6 +511,74 @@
     }
   }
 
+  /* ------------------------------------------------------------------------
+   * Sequence and comparison rendering
+   * ------------------------------------------------------------------------
+   * Rule 2 produces a chronological sequence, and the most useful question about
+   * it is whether the successful sign-in came from the same place as the
+   * failures. Both are shown as plain lists so a beginner can read them line by
+   * line rather than having to parse a sentence.
+   */
+  function comparisonBadge(status) {
+    switch (status) {
+      case 'match': return 'badge--low';
+      case 'differ': return 'badge--medium';
+      case 'partial': return 'badge--medium';
+      default: return 'badge--info';
+    }
+  }
+
+  function comparisonStatusText(status) {
+    switch (status) {
+      case 'match': return 'Same';
+      case 'differ': return 'Different';
+      case 'partial': return 'Partly matches';
+      default: return 'Cannot be determined';
+    }
+  }
+
+  function sequenceSection(finding) {
+    const section = el('div', 'finding__section');
+    section.appendChild(el('h4', null, 'Sequence of events'));
+    section.appendChild(el('p', 'sequence__chain', finding.sequenceText));
+
+    const list = el('ol', 'sequence');
+    const shown = finding.sequence.slice(0, 12);
+    shown.forEach(function (step) {
+      const successful = step.kind === 'successful sign-in';
+      const item = el('li', 'sequence__step sequence__step--' + (successful ? 'success' : 'failure'));
+      item.appendChild(el('span', 'sequence__time', step.iso || 'no timestamp'));
+      item.appendChild(el('span', 'sequence__what',
+        step.eventId + ' \u2013 ' + step.kind + (step.sourceIp ? ' from ' + step.sourceIp : '')));
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+
+    if (finding.sequence.length > shown.length) {
+      section.appendChild(el('p', 'sequence__more',
+        '...and ' + plural(finding.sequence.length - shown.length, 'further event') + ' in this sequence.'));
+    }
+    return section;
+  }
+
+  function comparisonSection(finding) {
+    const section = el('div', 'finding__section');
+    section.appendChild(el('h4', null, 'Do the sources match?'));
+    const list = el('ul', 'comparison-list');
+    finding.comparisons.forEach(function (comparison) {
+      const item = el('li', 'comparison');
+      const head = el('div', 'comparison__head');
+      head.appendChild(el('span', 'comparison__label', comparison.label));
+      head.appendChild(el('span', 'badge ' + comparisonBadge(comparison.status),
+        comparisonStatusText(comparison.status)));
+      item.appendChild(head);
+      item.appendChild(el('p', 'comparison__text', comparison.text));
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+    return section;
+  }
+
   function findingCard(finding) {
     const card = el('article', 'finding finding--' + severitySuffix(finding.severity));
     card.setAttribute('aria-label', finding.name + ' for ' + (finding.account || 'an unnamed account'));
@@ -562,6 +630,14 @@
     };
 
     addSection('Observed activity', finding.observedActivity);
+
+    if (finding.sequence && finding.sequence.length) {
+      card.appendChild(sequenceSection(finding));
+    }
+    if (finding.comparisons && finding.comparisons.length) {
+      card.appendChild(comparisonSection(finding));
+    }
+
     addSection('Why this matters', finding.whyItMatters);
     addSection('Possible benign explanation', finding.benign);
     addSection('Suggested investigation', finding.investigation, true);
@@ -588,12 +664,20 @@
       card.appendChild(score);
     }
 
-    if (finding.notes.length) {
+    if (finding.crossReferences.length || finding.notes.length) {
       const notes = el('div', 'finding__section finding__notes');
-      notes.appendChild(el('h4', null, 'Notes on this finding'));
-      const list = el('ul');
-      finding.notes.forEach(function (note) { list.appendChild(el('li', null, note)); });
-      notes.appendChild(list);
+      if (finding.crossReferences.length) {
+        notes.appendChild(el('h4', null, 'Related findings'));
+        const related = el('ul');
+        finding.crossReferences.forEach(function (reference) { related.appendChild(el('li', null, reference)); });
+        notes.appendChild(related);
+      }
+      if (finding.notes.length) {
+        notes.appendChild(el('h4', null, 'Notes on this finding'));
+        const list = el('ul');
+        finding.notes.forEach(function (note) { list.appendChild(el('li', null, note)); });
+        notes.appendChild(list);
+      }
       card.appendChild(notes);
     }
 

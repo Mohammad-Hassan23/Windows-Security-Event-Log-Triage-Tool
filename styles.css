@@ -760,6 +760,68 @@ kbd {
 
 .finding__notes { margin-top: .7rem; }
 .finding__notes ul { font-size: .85rem; color: var(--text-muted); }
+.finding__notes h4 + ul { margin-bottom: .5rem; }
+
+/* --------------------------------------------------------------------------
+   22b. Event sequence and source comparison
+   -------------------------------------------------------------------------- */
+.sequence__chain {
+  font-family: var(--mono);
+  font-size: .85rem;
+  color: var(--accent-text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .4rem .6rem;
+  overflow-wrap: anywhere;
+}
+.sequence {
+  list-style: none;
+  padding: 0;
+  margin: .5rem 0 0;
+  display: grid;
+  gap: .2rem;
+}
+.sequence__step {
+  display: flex;
+  gap: .6rem;
+  align-items: baseline;
+  font-size: .85rem;
+  padding: .2rem .5rem;
+  border-radius: 4px;
+  background: var(--surface);
+  border-left: 3px solid var(--border-strong);
+}
+.sequence__step--failure { border-left-color: var(--sev-medium); }
+.sequence__step--success { border-left-color: var(--sev-high); }
+.sequence__time {
+  font-family: var(--mono);
+  font-size: .8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 12.5rem;
+}
+.sequence__what { overflow-wrap: anywhere; }
+.sequence__more { font-size: .82rem; color: var(--text-faint); margin: .35rem 0 0; }
+
+.comparison-list { list-style: none; padding: 0; margin: .35rem 0 0; display: grid; gap: .5rem; }
+.comparison {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .45rem .6rem;
+}
+.comparison__head {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: .2rem;
+}
+.comparison__label { font-weight: 620; font-size: .88rem; }
+.comparison__text { font-size: .86rem; color: var(--text-muted); margin: 0; }
+
 
 /* --------------------------------------------------------------------------
    23. Settings form

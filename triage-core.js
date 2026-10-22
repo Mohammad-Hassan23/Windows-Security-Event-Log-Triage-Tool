@@ -1041,6 +1041,15 @@
     return Object.prototype.hasOwnProperty.call(section.labels, key) ? section.labels[key] : '';
   }
 
+  /* A message field that Windows fills with a placeholder ("-", "N/A") is not a
+   value, it is the absence of one. Treating it as a value once caused the tool to
+   report that two events "came from the same source address (-)", which is both
+   wrong and exactly the kind of assumption this project must never make. */
+  function cleanFieldValue(value) {
+    const text = cleanCell(value);
+    return isBlankValue(text) ? '' : text;
+  }
+
   /** Read the first occurrence of a label anywhere in the message. */
   function labelAnywhere(parsed, label) {
     if (!parsed || !parsed.labels) return '';
@@ -1306,11 +1315,15 @@
     const id = event.eventId;
 
     /* ---- values that appear in several event types ---------------------- */
-    fields.sourceIp = labelInSection(parsed, ['network information'], 'source network address')
+    fields.sourceIp = cleanFieldValue(
+      labelInSection(parsed, ['network information'], 'source network address')
       || labelAnywhere(parsed, 'source network address')
-      || event.sourceIpColumn; // last resort: a dedicated column, if the export had one
-    fields.workstation = labelInSection(parsed, ['network information'], 'workstation name')
-      || labelAnywhere(parsed, 'workstation name');
+      || event.sourceIpColumn // last resort: a dedicated column, if the export had one
+    );
+    fields.workstation = cleanFieldValue(
+      labelInSection(parsed, ['network information'], 'workstation name')
+      || labelAnywhere(parsed, 'workstation name')
+    );
     fields.logonType = labelInSection(parsed, ['logon information'], 'logon type')
       || labelAnywhere(parsed, 'logon type');
     fields.logonTypeText = describeLogonType(fields.logonType);
@@ -1669,6 +1682,7 @@
       severity: spec.severity,
       severityReasons: spec.severityReasons || [],
       account: spec.account || '',
+      accountKey: spec.accountKey || '',
       actor: spec.actor || '',
       eventIds: spec.eventIds || [],
       events: events,
@@ -1679,6 +1693,10 @@
       durationText: '',
       sourceIps: spec.sourceIps || [],
       workstations: spec.workstations || [],
+      sequence: spec.sequence || [],
+      sequenceText: spec.sequenceText || '',
+      comparisons: spec.comparisons || [],
+      crossReferences: spec.crossReferences || [],
       observedActivity: spec.observedActivity || '',
       whyItMatters: spec.whyItMatters || '',
       benign: spec.benign || '',
@@ -1739,6 +1757,93 @@
     if (!list.length) return '';
     if (list.length === 1) return list[0];
     return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+  }
+
+  /**
+   * Group events by account, keeping unattributed events out of the groups.
+   *
+   * WHY UNATTRIBUTED EVENTS ARE EXCLUDED RATHER THAN LUMPED TOGETHER
+   * If a row names no account anywhere, we do not know whose activity it is.
+   * Putting several such events in one bucket would invent a relationship that
+   * the data does not support, and could then produce a finding about "an
+   * unknown account" that looks alarming and means nothing. They are counted and
+   * reported as a limitation instead.
+   */
+  function groupEventsByAccount(events) {
+    const groups = {};
+    let unattributed = 0;
+
+    (events || []).forEach(function (event) {
+      const key = event.accountKey;
+      if (!key) {
+        unattributed++;
+        return;
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(event);
+    });
+
+    return { groups: groups, unattributed: unattributed };
+  }
+
+  /**
+   * Compare two sets of values and describe the result in plain English.
+   *
+   * This exists for one specific question: did the successful sign-in come from
+   * the same place as the failed attempts? The answer can be "yes", "no", or
+   * "the file does not say", and all three must be reported as what they are.
+   * Assuming a match would be the single easiest way to mislead a beginner, so
+   * nothing here guesses.
+   */
+  function compareValues(valuesA, valuesB, singular, plural) {
+    const a = distinctValues(valuesA);
+    const b = distinctValues(valuesB);
+
+    if (!a.length && !b.length) {
+      return {
+        status: 'unknown',
+        text: 'Neither the failed attempts nor the successful sign-in record the ' + singular
+          + ', so it cannot be compared from this file.'
+      };
+    }
+    if (!a.length) {
+      return {
+        status: 'unknown',
+        text: 'The failed attempts do not record the ' + singular
+          + ', so the successful sign-in cannot be compared with them from this file.'
+      };
+    }
+    if (!b.length) {
+      return {
+        status: 'unknown',
+        text: 'The successful sign-in does not record the ' + singular
+          + ', so it cannot be compared with the failed attempts from this file.'
+      };
+    }
+
+    const lowerB = b.map(function (v) { return v.toLowerCase(); });
+    const shared = a.filter(function (v) { return lowerB.indexOf(v.toLowerCase()) !== -1; });
+
+    if (shared.length === a.length && shared.length === b.length) {
+      return {
+        status: 'match',
+        text: 'The failed attempts and the successful sign-in both came from the same ' + singular
+          + ' (' + joinWithAnd(shared) + ').'
+      };
+    }
+    if (shared.length) {
+      return {
+        status: 'partial',
+        text: 'The ' + plural + ' partly match. The failed attempts came from ' + joinWithAnd(a)
+          + ' and the successful sign-in came from ' + joinWithAnd(b) + ', with '
+          + joinWithAnd(shared) + ' in common. That overlap is worth checking rather than assuming.'
+      };
+    }
+    return {
+      status: 'differ',
+      text: 'The failed attempts came from ' + joinWithAnd(a) + ', but the successful sign-in came from '
+        + joinWithAnd(b) + '. The ' + plural + ' do not match, so the two are not obviously the same activity.'
+    };
   }
 
   /** Sorts events by time. Events with no readable time go last, in file order. */
@@ -2016,6 +2121,257 @@
   }
 
   /* ------------------------------------------------------------------------
+   * RULE 2 - failed logons followed by a successful sign-in
+   * ------------------------------------------------------------------------
+   * WHAT IT LOOKS FOR
+   *   A burst of failed sign-ins for one account, and then a successful sign-in
+   *   for that same account shortly afterwards. On its own that reads like
+   *   "somebody worked through passwords until one worked".
+   *
+   * WHAT IT DOES NOT SAY
+   *   It does not say that happened. The same pattern is produced by an ordinary
+   *   person who mistyped a password several times and then got it right, and by
+   *   a saved credential on a phone or a backup job that had the wrong password
+   *   until somebody fixed it. Every finding says so.
+   *
+   * THE SOURCE ADDRESS COMPARISON IS THE POINT
+   *   The most useful single fact here is whether the successful sign-in came
+   *   from the same place as the failures. So the tool compares them and states
+   *   one of three answers - same, different, or cannot be determined - and never
+   *   assumes a match. When the sources differ, or when the sequence could not be
+   *   placed inside a time window, the priority is lowered and the reason is
+   *   shown rather than the correlation being overstated.
+   *
+   * ORDERING WHEN TIMESTAMPS ARE MISSING
+   *   Without usable timestamps the order is taken from the order of the rows in
+   *   the file, which is usually chronological but is still an assumption. The
+   *   finding says that plainly instead of implying certainty.
+   */
+  function analyseFailedLogonsFollowedBySuccess(context) {
+    const findings = [];
+    const notes = [];
+    const settings = context.settings;
+    const threshold = settings.failedLogonThreshold;
+    const windowMinutes = settings.failedLogonWindowMinutes;
+    const windowMs = windowMinutes * 60000;
+    const useWindow = settings.useTimeWindow && context.timelineReliable;
+
+    const failureGroups = groupEventsByAccount(context.events.filter(function (e) { return e.eventId === 4625; }));
+    const successGroups = groupEventsByAccount(context.events.filter(function (e) { return e.eventId === 4624; }));
+
+    if (!Object.keys(failureGroups.groups).length || !Object.keys(successGroups.groups).length) {
+      return { findings: findings, notes: notes };
+    }
+
+    Object.keys(failureGroups.groups).forEach(function (key) {
+      const allFailures = sortByTime(failureGroups.groups[key]);
+      // "Repeated" failures only: one wrong password followed by a success is
+      // completely ordinary and must not produce an alert.
+      if (allFailures.length < threshold) return;
+
+      const successes = sortByTime(successGroups.groups[key] || []);
+      if (!successes.length) return;
+
+      const account = allFailures[0].account || '(account not named)';
+      const findingNotes = [];
+
+      /* ---- which failures form the burst? -------------------------------- */
+      const timedFailures = allFailures.filter(function (e) { return e.timestamp && e.timestamp.valid; });
+      let burstFailures = allFailures;
+      let windowApplied = false;
+
+      if (useWindow && timedFailures.length) {
+        const scan = findTimeClusters(timedFailures, windowMs, threshold);
+        if (scan.largest) {
+          burstFailures = timedFailures.slice(scan.largest.startIndex, scan.largest.endIndex + 1);
+          windowApplied = true;
+        } else {
+          findingNotes.push('The failures for this account are spread out rather than clustered, so the sequence below is weaker evidence than a tight burst would be.');
+        }
+      }
+
+      /* ---- find the successful sign-in that follows ---------------------- */
+      const lastFailure = burstFailures[burstFailures.length - 1];
+      const lastFailureMs = lastFailure.timestamp && lastFailure.timestamp.valid ? lastFailure.timestamp.ms : null;
+
+      let success = null;
+      let laterSuccesses = 0;
+
+      if (useWindow && lastFailureMs !== null) {
+        successes.forEach(function (candidate) {
+          if (!candidate.timestamp || !candidate.timestamp.valid) return;
+          const gap = candidate.timestamp.ms - lastFailureMs;
+          if (gap > 0 && gap <= windowMs) {
+            if (!success) success = candidate;
+            else laterSuccesses++;
+          }
+        });
+      } else {
+        // No usable timestamps: fall back to the order of the rows, and say so.
+        successes.forEach(function (candidate) {
+          if (candidate.index > lastFailure.index) {
+            if (!success) success = candidate;
+            else laterSuccesses++;
+          }
+        });
+        if (success) {
+          findingNotes.push('The timestamps in this file are not reliable enough to confirm how long after the failures the successful sign-in happened, '
+            + 'so the order is taken from the order of the rows in the file. That is usually chronological, but it is an assumption, not a fact.');
+        }
+      }
+
+      if (!success) return; // the failures were never followed by a success
+
+      if (laterSuccesses) {
+        findingNotes.push('A further ' + plural(laterSuccesses, 'successful sign-in') + ' for this account was also recorded after these failures. '
+          + 'The earliest one is described here so that the same sequence is not reported twice.');
+      }
+
+      /* ---- compare where the two came from -------------------------------- */
+      const ipComparison = compareValues(
+        burstFailures.map(function (e) { return e.fields.sourceIp; }),
+        [success.fields.sourceIp],
+        'source address',
+        'source addresses'
+      );
+      const workstationComparison = compareValues(
+        burstFailures.map(function (e) { return isBlankValue(e.fields.workstation) ? '' : e.fields.workstation; }),
+        [isBlankValue(success.fields.workstation) ? '' : success.fields.workstation],
+        'workstation name',
+        'workstation names'
+      );
+
+      /* ---- priority ------------------------------------------------------ */
+      let severity = SEVERITY.HIGH;
+      const severityReasons = [];
+      severityReasons.push(plural(burstFailures.length, 'failed sign-in attempt') + ' for one account followed by a successful sign-in for that same account'
+        + (windowApplied ? ', inside a single ' + windowMinutes + '-minute window' : '') + '.');
+
+      if (ipComparison.status === 'differ') {
+        severity = SEVERITY.MEDIUM;
+        severityReasons.push('The successful sign-in came from a different address to the failures, which weakens the correlation, '
+          + 'so the priority is lowered rather than overstated.');
+      } else if (ipComparison.status === 'unknown') {
+        severityReasons.push('The source address could not be compared, so the correlation rests on the account name and the timing alone.');
+      } else if (ipComparison.status === 'match') {
+        severityReasons.push('The successful sign-in came from the same address as the failures, which is what makes this sequence worth a closer look.');
+      }
+
+      if (!windowApplied && severity === SEVERITY.HIGH) {
+        severity = SEVERITY.MEDIUM;
+        severityReasons.push('The failures and the successful sign-in could not be placed inside a single time window, so the sequence is weaker evidence than a tight burst would be.');
+      }
+
+      /* ---- the chronological sequence ------------------------------------ */
+      const sequenceEvents = burstFailures.concat([success]);
+      const sequence = sequenceEvents.map(function (e) {
+        const hasTime = e.timestamp && e.timestamp.valid;
+        return {
+          eventId: e.eventId,
+          line: e.line,
+          ms: hasTime ? e.timestamp.ms : null,
+          iso: hasTime ? toIsoString(e.timestamp.ms) : '',
+          kind: e.eventId === 4624 ? 'successful sign-in' : 'failed sign-in',
+          sourceIp: e.fields.sourceIp,
+          logonTypeText: e.fields.logonTypeText
+        };
+      });
+
+      const sequenceText = sequence.length <= 14
+        ? sequence.map(function (s) { return s.eventId; }).join(' \u2192 ')
+        : sequence.slice(0, 6).map(function (s) { return s.eventId; }).join(' \u2192 ')
+          + ' \u2026 (' + plural(burstFailures.length, 'failure') + ') \u2026 \u2192 4624';
+
+      /* ---- observed activity --------------------------------------------- */
+      const failureTimes = [];
+      burstFailures.forEach(function (e) {
+        if (e.timestamp && e.timestamp.valid) failureTimes.push(e.timestamp.ms);
+      });
+      const firstFailureMs = failureTimes.length ? Math.min.apply(null, failureTimes) : null;
+      const lastFailureTimeMs = failureTimes.length ? Math.max.apply(null, failureTimes) : null;
+      const successMs = success.timestamp && success.timestamp.valid ? success.timestamp.ms : null;
+
+      const sentences = [];
+      sentences.push('The account "' + account + '" recorded ' + plural(burstFailures.length, 'failed sign-in attempt')
+        + (firstFailureMs === null ? '' : ' between ' + toIsoString(firstFailureMs) + ' and ' + toIsoString(lastFailureTimeMs))
+        + ', and then signed in successfully'
+        + (successMs === null ? '' : ' at ' + toIsoString(successMs))
+        + '.');
+      sentences.push('The sequence of events is: ' + sequenceText + '.');
+      if (successMs !== null && lastFailureMs !== null) {
+        sentences.push('The successful sign-in came ' + formatDuration(successMs - lastFailureMs) + ' after the last failed attempt.');
+      }
+      sentences.push(ipComparison.text);
+      sentences.push(workstationComparison.text);
+
+      const failureLogonTypes = distinctValues(burstFailures.map(function (e) {
+        return e.fields.logonTypeText || (e.fields.logonType ? 'type ' + e.fields.logonType : '');
+      }));
+      const successLogonType = success.fields.logonTypeText || (success.fields.logonType ? 'type ' + success.fields.logonType : '');
+      if (failureLogonTypes.length) {
+        sentences.push('The failed attempts used ' + joinWithAnd(failureLogonTypes) + '.');
+      }
+      if (successLogonType) {
+        sentences.push('The successful sign-in used ' + successLogonType + '.');
+      }
+
+      findings.push(makeFinding({
+        rule: 'failedLogonsFollowedBySuccess',
+        name: 'Possible Password Guessing Followed By Success',
+        account: account,
+        accountKey: key,
+        severity: severity,
+        severityReasons: severityReasons,
+        eventIds: [4625, 4624],
+        events: sequenceEvents,
+        sourceIps: distinctValues(
+          burstFailures.map(function (e) { return e.fields.sourceIp; }).concat([success.fields.sourceIp])
+        ),
+        workstations: distinctValues(
+          burstFailures.map(function (e) { return e.fields.workstation; })
+            .concat([success.fields.workstation])
+            .map(function (v) { return isBlankValue(v) ? '' : v; })
+        ),
+        sequence: sequence,
+        sequenceText: sequenceText,
+        comparisons: [
+          { label: 'Source address', status: ipComparison.status, text: ipComparison.text },
+          { label: 'Workstation', status: workstationComparison.status, text: workstationComparison.text }
+        ],
+        observedActivity: sentences.join(' '),
+        whyItMatters: 'Multiple failed sign-in attempts followed by a successful sign-in can indicate that a password was eventually guessed. '
+          + 'However, it could equally represent a legitimate user who eventually entered the correct password, so the sequence on its own '
+          + 'does not establish what happened.',
+        benign: 'The legitimate user may simply have entered the wrong password several times and then got it right. A saved credential that was '
+          + 'finally updated, a service account whose password was corrected, or somebody signing in from a new device with a temporary typing '
+          + 'problem all produce exactly this pattern.',
+        investigation: [
+          'Verify the source address: does it belong to the user, to the organisation, or to somewhere unexpected?',
+          'Check whether the device or workstation involved belongs to that user.',
+          'Review what happened after the successful sign-in, in this file and elsewhere.',
+          'Look for authentication attempts against other accounts from the same place.',
+          'Check whether the account uses multi-factor authentication, and whether the sign-in satisfied it.',
+          'Ask the account owner whether they had trouble signing in at that time.'
+        ],
+        notes: findingNotes,
+        scoreKeys: [
+          { key: 'repeatedFailedLogons', detail: plural(burstFailures.length, 'attempt') + ', threshold ' + threshold },
+          {
+            key: 'failedLogonsFollowedBySuccess',
+            detail: (successMs !== null && lastFailureMs !== null)
+              ? 'the sign-in came ' + formatDuration(successMs - lastFailureMs) + ' after the last failure'
+              : 'the sign-in follows the failures in this file'
+          }
+        ]
+      }));
+    });
+
+    return { findings: findings, notes: notes };
+  }
+
+  /* __CHUNK__ */
+
+  /* ------------------------------------------------------------------------
    * Running the rules
    * ------------------------------------------------------------------------
    * analyse() is deliberately separate from parse() so that the settings can be
@@ -2055,6 +2411,12 @@
       ruleResult.notes.forEach(function (n) { notes.push(n); });
     }
 
+    if (settings.rules.failedLogonsFollowedBySuccess) {
+      const ruleResult = analyseFailedLogonsFollowedBySuccess(context);
+      ruleResult.findings.forEach(function (f) { findings.push(f); });
+      ruleResult.notes.forEach(function (n) { notes.push(n); });
+    }
+
     /* DE-DUPLICATION.
      * Rules are written so that one account produces one finding per activity,
      * but two rules can legitimately describe the same events (a burst of
@@ -2078,6 +2440,34 @@
       if (a.firstMs === null) return 1;
       if (b.firstMs === null) return -1;
       return a.firstMs - b.firstMs;
+    });
+
+    /* CROSS-REFERENCES.
+     * The authentication rules can describe the same events from two angles: the
+     * failures themselves, and the failures plus the sign-in that followed. That
+     * is intentional - they answer different questions - but a reader should not
+     * be left thinking two separate incidents happened, so each finding points at
+     * the other. */
+    const byRuleAndAccount = {};
+    unique.forEach(function (finding) {
+      byRuleAndAccount[finding.rule + '|' + finding.accountKey] = finding;
+    });
+
+    unique.forEach(function (finding) {
+      if (finding.rule === 'repeatedFailedLogons') {
+        const counterpart = byRuleAndAccount['failedLogonsFollowedBySuccess|' + finding.accountKey];
+        if (counterpart) {
+          finding.crossReferences.push('The same failed attempts are described from a different angle by the "'
+            + counterpart.name + '" finding. They are two views of one piece of activity, not two separate incidents.');
+        }
+      }
+      if (finding.rule === 'failedLogonsFollowedBySuccess') {
+        const counterpart = byRuleAndAccount['repeatedFailedLogons|' + finding.accountKey];
+        if (counterpart) {
+          finding.crossReferences.push('The failed attempts in this sequence are also reported by the "'
+            + counterpart.name + '" finding. The two describe the same activity at different levels of detail.');
+        }
+      }
     });
 
     /* Dashboard figures. Built here so the tests and the interface agree. */
@@ -2486,6 +2876,9 @@
     // Detection rules
     analyse: analyse,
     analyseRepeatedFailedLogons: analyseRepeatedFailedLogons,
+    analyseFailedLogonsFollowedBySuccess: analyseFailedLogonsFollowedBySuccess,
+    groupEventsByAccount: groupEventsByAccount,
+    compareValues: compareValues,
     defaultSettings: defaultSettings,
     normalizeSettings: normalizeSettings,
     DEFAULT_SETTINGS: DEFAULT_SETTINGS,
