@@ -2372,6 +2372,481 @@
   /* __CHUNK__ */
 
   /* ------------------------------------------------------------------------
+   * RULE 3 - a new account granted privileges
+   * ------------------------------------------------------------------------
+   * WHAT IT LOOKS FOR
+   *   A 4720 (account created) followed by a 4728 or 4732 (added to a group) for
+   *   the SAME target account. That is the classic "make myself another way in"
+   *   pattern - and also exactly what a helpdesk does when onboarding somebody.
+   *
+   * PRIORITY
+   *   High when the group normally carries elevated rights (Administrators,
+   *   Domain Admins, and the rest of PRIVILEGED_GROUPS), Medium otherwise. A
+   *   privileged group is not proof of anything, but it does change how much
+   *   attention the change deserves.
+   *
+   * WHAT IT DOES NOT SAY
+   *   It never says the account creation was unauthorised. It says the two events
+   *   are worth confirming with whoever does the onboarding, and it names both the
+   *   account that created the user and the account that granted the rights -
+   *   which are often different people.
+   *
+   * TIMING
+   *   A privilege change inside the configured window is the strongest form, and
+   *   the finding says so. A change later in the same file is still reported -
+   *   identity, not timing, is what links these events - but the finding states
+   *   how long the gap was so the reader can judge it.
+   */
+  function analyseAccountCreatedThenPrivileged(context) {
+    const findings = [];
+    const notes = [];
+    const settings = context.settings;
+    const windowMinutes = settings.failedLogonWindowMinutes;
+
+    const creations = context.events.filter(function (e) { return e.eventId === 4720; });
+    const privilegeChanges = context.events.filter(function (e) {
+      return e.eventId === 4728 || e.eventId === 4732;
+    });
+
+    if (!creations.length || !privilegeChanges.length) return { findings: findings, notes: notes };
+
+    const privilegeByAccount = groupEventsByAccount(privilegeChanges);
+    const handled = {};
+
+    creations.forEach(function (creation) {
+      const key = creation.accountKey;
+      if (!key) return; // no target account, so nothing can be matched safely
+      if (handled[key]) return;
+
+      const later = sortByTime(privilegeByAccount.groups[key] || []).filter(function (candidate) {
+        return candidate.index > creation.index;
+      });
+      if (!later.length) return;
+
+      const privilegeEvent = later[0];
+      handled[key] = true;
+
+      const account = creation.account || '(account not named)';
+      const groupName = privilegeEvent.fields.groupName;
+      const privileged = !!privilegeEvent.fields.groupIsPrivileged;
+      const findingNotes = [];
+
+      /* ---- the gap between the two events -------------------------------- */
+      const createdMs = creation.timestamp && creation.timestamp.valid ? creation.timestamp.ms : null;
+      const grantedMs = privilegeEvent.timestamp && privilegeEvent.timestamp.valid ? privilegeEvent.timestamp.ms : null;
+      let gapText = '';
+
+      if (createdMs !== null && grantedMs !== null) {
+        gapText = formatDuration(grantedMs - createdMs);
+        if (grantedMs - createdMs > windowMinutes * 60000) {
+          findingNotes.push('The privilege change came ' + gapText + ' after the account was created, which is longer than the '
+            + windowMinutes + '-minute correlation window used elsewhere in this tool. Identity still links the two events, '
+            + 'but they were not close together in time.');
+        }
+      } else {
+        findingNotes.push('The timestamps for these two events are missing or unreadable, so the gap between them cannot be measured. '
+          + 'The account name is what links them.');
+      }
+
+      /* ---- who did what -------------------------------------------------- */
+      const creator = creation.fields.actor;
+      const granter = privilegeEvent.fields.actor || privilegeEvent.account;
+      if (creator && granter && creator.toLowerCase() !== granter.toLowerCase()) {
+        findingNotes.push('Two different accounts were involved: "' + creator + '" created the account and "'
+          + granter + '" granted the group membership. Worth confirming that both were authorised.');
+      }
+      if (later.length > 1) {
+        findingNotes.push('A further ' + plural(later.length - 1, 'privilege change') + ' for this account was also recorded. '
+          + 'The first one is described here so the same activity is not reported twice.');
+      }
+
+      /* ---- priority ------------------------------------------------------ */
+      const severityReasons = [];
+      let severity = SEVERITY.MEDIUM;
+      if (privileged) {
+        severity = SEVERITY.HIGH;
+        severityReasons.push('The group "' + groupName + '" normally carries elevated rights. '
+          + privilegeEvent.fields.groupReason);
+      } else {
+        severityReasons.push('The group "' + groupName + '" is not one this tool treats as privileged, so the change is reported at Medium.');
+      }
+      severityReasons.push('A user account was created and then added to a group for the same account'
+        + (gapText ? ', ' + gapText + ' apart' : '') + '.');
+
+      /* ---- sequence ------------------------------------------------------ */
+      const sequenceEvents = [creation, privilegeEvent];
+      const sequence = sequenceEvents.map(function (e) {
+        const hasTime = e.timestamp && e.timestamp.valid;
+        return {
+          eventId: e.eventId,
+          line: e.line,
+          ms: hasTime ? e.timestamp.ms : null,
+          iso: hasTime ? toIsoString(e.timestamp.ms) : '',
+          kind: e.eventId === 4720 ? 'account created' : 'added to ' + (e.fields.groupName || 'a group'),
+          sourceIp: '',
+          logonTypeText: ''
+        };
+      });
+
+      const sentences = [];
+      sentences.push('The account "' + account + '" was created'
+        + (createdMs === null ? '' : ' at ' + toIsoString(createdMs))
+        + ', and then added to the group "' + (groupName || 'unknown group') + '"'
+        + (grantedMs === null ? '' : ' at ' + toIsoString(grantedMs)) + '.');
+      if (gapText) sentences.push('The privilege change came ' + gapText + ' after the creation.');
+      sentences.push('The sequence of events is: 4720 \u2192 ' + privilegeEvent.eventId + '.');
+      sentences.push(creator
+        ? 'The account "' + creator + '" created the user.'
+        : 'The event does not record which account created the user.');
+      sentences.push(granter
+        ? 'The group membership was granted by "' + granter + '".'
+        : 'The event does not record which account granted the group membership.');
+      sentences.push(privileged
+        ? 'The group "' + groupName + '" is one this tool treats as privileged.'
+        : 'The group "' + groupName + '" is not one this tool treats as privileged.');
+
+      findings.push(makeFinding({
+        rule: 'accountCreatedThenPrivileged',
+        name: 'New Account Granted Privileges',
+        account: account,
+        accountKey: key,
+        actor: creator,
+        severity: severity,
+        severityReasons: severityReasons,
+        eventIds: [4720, privilegeEvent.eventId],
+        events: sequenceEvents,
+        sourceIps: [],
+        workstations: [],
+        sequence: sequence,
+        sequenceText: '4720 \u2192 ' + privilegeEvent.eventId,
+        comparisons: [],
+        observedActivity: sentences.join(' '),
+        whyItMatters: 'Creating an account and then granting it elevated privileges can be routine administration, for example onboarding '
+          + 'a new administrator. It is also a common way to keep access to a system, or to escalate privileges, because the new account '
+          + 'looks as though it belongs. The two events on their own do not tell you which of those happened.',
+        benign: 'This is frequently normal onboarding or a role change: somebody creates the account for a new starter and then adds it to '
+          + 'the group that person needs. It may also be an automated provisioning process doing exactly what it was configured to do.',
+        investigation: [
+          'Confirm whether the account creation was requested and authorised, and by whom.',
+          'Identify the account that created the user and the account that granted the rights.',
+          'Check whether that group should be granted at all, and to that person.',
+          'Review what the new account did afterwards, and whether it is still needed.',
+          'Check whether the same creator made other account or group changes in this data.'
+        ],
+        notes: findingNotes,
+        scoreKeys: [
+          { key: 'newAccountGrantedPrivileges', detail: 'created and added to ' + (groupName || 'a group') }
+        ].concat(privileged ? [{ key: 'privilegedGroupChange', detail: groupName }] : [])
+      }));
+    });
+
+    return { findings: findings, notes: notes };
+  }
+
+  /* ------------------------------------------------------------------------
+   * RULE 4 - the security audit log was cleared
+   * ------------------------------------------------------------------------
+   * A 1102 is High priority on its own, and this is the one place in the tool
+   * where that is true of a single event. The reason is not that clearing a log
+   * is always malicious - it often is not - but that the act removes the record of
+   * everything else, so the evidence needed to judge it has usually just been
+   * destroyed. That asymmetry is worth teaching explicitly.
+   */
+  function analyseAuditLogCleared(context) {
+    const findings = [];
+    const notes = [];
+
+    const clearedEvents = context.events.filter(function (e) { return e.eventId === 1102; });
+    if (!clearedEvents.length) return { findings: findings, notes: notes };
+
+    clearedEvents.forEach(function (event) {
+      const actor = event.fields.actor || event.account || '';
+      const clearedMs = event.timestamp && event.timestamp.valid ? event.timestamp.ms : null;
+      const findingNotes = [];
+
+      /* What else is in the file, before and after the clearing? This is the only
+         context that survives, because the log itself has been emptied. */
+      const before = context.events.filter(function (e) { return e.index < event.index; });
+      const adminBefore = before.filter(function (e) {
+        return [4720, 4726, 4728, 4732, 7045].indexOf(e.eventId) !== -1;
+      });
+      const after = context.events.filter(function (e) { return e.index > event.index; });
+
+      if (before.length) {
+        findingNotes.push('In this file, ' + plural(before.length, 'event') + ' came before the log was cleared'
+          + (adminBefore.length ? ', including ' + plural(adminBefore.length, 'account, group or service change') + '.' : '.')
+          + ' These may no longer be recorded on the computer itself.');
+      }
+      if (after.length) {
+        findingNotes.push(plural(after.length, 'event') + ' in this file came after the log was cleared. '
+          + 'Anything that happened between the clearing and the next recorded event is missing.');
+      }
+
+      const sentences = [];
+      sentences.push('The Windows Security audit log was cleared'
+        + (clearedMs === null ? '' : ' at ' + toIsoString(clearedMs))
+        + (actor ? ' by the account "' + actor + '"' : '') + '.');
+      sentences.push('Clearing the log deletes the recorded security events on that computer.');
+
+      findings.push(makeFinding({
+        rule: 'securityLogCleared',
+        name: 'Security Audit Log Cleared',
+        account: actor,
+        accountKey: accountKeyOf(actor),
+        actor: actor,
+        severity: SEVERITY.HIGH,
+        severityReasons: [
+          'A single 1102 event is High priority because it removes the evidence needed to judge everything else that happened.',
+          actor
+            ? 'The event names "' + actor + '" as the account that cleared the log.'
+            : 'The event does not name the account that cleared the log.'
+        ],
+        eventIds: [1102],
+        events: [event],
+        sourceIps: distinctValues([event.fields.sourceIp]),
+        workstations: distinctValues([event.fields.workstation]),
+        observedActivity: sentences.join(' '),
+        whyItMatters: 'This event means the Windows Security audit log was cleared. That can happen during legitimate maintenance, '
+          + 'but because attackers may clear logs to remove evidence, it should normally be investigated. The absence of other '
+          + 'suspicious events after a cleared log does not mean nothing happened - it may mean the record was removed.',
+        benign: 'A technician may have cleared the log deliberately during a documented rebuild or handover, a lab machine may be reset '
+          + 'before an exercise, or a maintenance script may rotate logs. Those are ordinary explanations, and they are worth confirming.',
+        investigation: [
+          'Find out who cleared the log, whether they were authorised, and why.',
+          'Check whether anything unusual happened shortly before the log was cleared.',
+          'Check whether the same account did anything else of note in this data.',
+          'Look for the same period in another log or on another system, because this log has lost its own history.',
+          'Check whether log clearing should even be possible for that account.'
+        ],
+        notes: findingNotes,
+        scoreKeys: [{ key: 'securityLogCleared', detail: 'one 1102 event' }]
+      }));
+    });
+
+    return { findings: findings, notes: notes };
+  }
+
+  /* ------------------------------------------------------------------------
+   * RULE 5 - administrative / privilege activity summary
+   * ------------------------------------------------------------------------
+   * This is NOT a finding and carries no severity. It collects the events that
+   * change what an account, group, service or log can do - creation, deletion,
+   * privileged group changes, service installation and log clearing - and lists
+   * them in one place so a student can see the shape of the day's administration.
+   *
+   * It deliberately does NOT correlate them with each other. Two unrelated
+   * administrators creating two unrelated accounts are not a story, and pretending
+   * otherwise is how tools produce noise that analysts learn to ignore. The
+   * summary says exactly that, and leaves the judgement to the reader.
+   */
+  const ADMIN_ACTIVITY_IDS = [4720, 4726, 4728, 4732, 7045, 1102];
+
+  function summariseAdministrativeActivity(context) {
+    const events = context.events.filter(function (e) {
+      return ADMIN_ACTIVITY_IDS.indexOf(e.eventId) !== -1;
+    });
+    if (!events.length) return null;
+
+    const sorted = sortByTime(events);
+
+    const items = sorted.map(function (event) {
+      const fields = event.fields;
+      let detail = '';
+
+      if (event.eventId === 4720 || event.eventId === 4726) {
+        detail = event.account ? 'account "' + event.account + '"' : '';
+      } else if (event.eventId === 4728 || event.eventId === 4732) {
+        detail = '"' + (fields.memberAccount || event.account || '?') + '" added to "'
+          + (fields.groupName || 'unknown group') + '"'
+          + (fields.groupIsPrivileged ? ' (a privileged group)' : '');
+      } else if (event.eventId === 7045) {
+        detail = 'service "' + (fields.serviceName || 'unknown') + '"'
+          + (fields.servicePath ? ' pointing at ' + fields.servicePath : '');
+      } else if (event.eventId === 1102) {
+        detail = 'the Security audit log was cleared';
+      }
+
+      return {
+        eventId: event.eventId,
+        title: event.title,
+        line: event.line,
+        iso: event.timestamp && event.timestamp.valid ? toIsoString(event.timestamp.ms) : '',
+        ms: event.timestamp && event.timestamp.valid ? event.timestamp.ms : null,
+        account: event.account,
+        actor: fields.actor || event.account,
+        detail: detail,
+        privileged: !!fields.groupIsPrivileged
+      };
+    });
+
+    const counts = {};
+    items.forEach(function (item) {
+      counts[item.eventId] = (counts[item.eventId] || 0) + 1;
+    });
+
+    const actorTotals = {};
+    items.forEach(function (item) {
+      if (!item.actor) return;
+      actorTotals[item.actor] = (actorTotals[item.actor] || 0) + 1;
+    });
+    const actors = Object.keys(actorTotals).map(function (name) {
+      return { name: name, count: actorTotals[name] };
+    }).sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
+
+    return {
+      items: items,
+      counts: counts,
+      actors: actors,
+      total: items.length,
+      privilegedChanges: items.filter(function (item) { return item.privileged; }).length,
+      logCleared: items.filter(function (item) { return item.eventId === 1102; }).length,
+      explanation: 'These events are listed together because they all change what an account, group, service or log can do. '
+        + 'They are not assumed to be related to each other: the account involved is shown for every line, so you can see whether '
+        + 'the same person or account appears more than once. Deciding whether they form a story is the analyst\'s job, not the tool\'s.'
+    };
+  }
+
+  /* ------------------------------------------------------------------------
+   * Dashboard figures
+   * ------------------------------------------------------------------------
+   * Everything the specification asks the dashboard to show, computed here rather
+   * than in the interface so the tests and the page always agree.
+   *
+   * The "priority" of an event is the highest severity of any finding it belongs
+   * to, or its own base severity when no rule escalated it. That is what makes
+   * "filter by severity" meaningful at the event level.
+   */
+  function buildDashboard(parseResult, findings, adminSummary) {
+    const events = parseResult.events || [];
+    const countOf = function (id) {
+      return events.filter(function (e) { return e.eventId === id; }).length;
+    };
+
+    const severityByIndex = {};
+    findings.forEach(function (finding) {
+      finding.events.forEach(function (event) {
+        const current = severityByIndex[event.index];
+        if (!current || severityRank(finding.severity) > severityRank(current)) {
+          severityByIndex[event.index] = finding.severity;
+        }
+      });
+    });
+
+    const countAccounts = function (list) {
+      const totals = {};
+      list.forEach(function (event) {
+        if (!event.accountKey) return;
+        if (!totals[event.accountKey]) totals[event.accountKey] = { account: event.account, count: 0 };
+        totals[event.accountKey].count++;
+      });
+      return Object.keys(totals).map(function (key) { return totals[key]; })
+        .sort(function (a, b) { return b.count - a.count || a.account.localeCompare(b.account); })
+        .slice(0, 5);
+    };
+
+    const eventIdCounts = (parseResult.stats && parseResult.stats.eventIdCounts) || {};
+    const topEventIds = Object.keys(eventIdCounts).map(function (key) {
+      const id = Number(key);
+      const info = getEventInfo(id);
+      return {
+        eventId: id,
+        title: info ? info.title : 'Not explained by this version',
+        count: eventIdCounts[key]
+      };
+    }).sort(function (a, b) {
+      return b.count - a.count || a.eventId - b.eventId;
+    }).slice(0, 6);
+
+    /* ---- timeline of noteworthy activity ------------------------------- */
+    const seenIndex = {};
+    const noteworthy = [];
+
+    findings.forEach(function (finding) {
+      finding.events.forEach(function (event) {
+        if (seenIndex[event.index]) return;
+        seenIndex[event.index] = true;
+        noteworthy.push({
+          index: event.index,
+          eventId: event.eventId,
+          title: event.title,
+          account: event.account,
+          iso: event.timestamp && event.timestamp.valid ? toIsoString(event.timestamp.ms) : '',
+          ms: event.timestamp && event.timestamp.valid ? event.timestamp.ms : null,
+          reason: finding.name
+        });
+      });
+    });
+
+    if (adminSummary) {
+      adminSummary.items.forEach(function (item) {
+        const event = events.filter(function (e) { return e.line === item.line && e.eventId === item.eventId; })[0];
+        if (!event || seenIndex[event.index]) return;
+        seenIndex[event.index] = true;
+        noteworthy.push({
+          index: event.index,
+          eventId: event.eventId,
+          title: event.title,
+          account: event.account,
+          iso: item.iso,
+          ms: item.ms,
+          reason: 'Administrative or privilege activity'
+        });
+      });
+    }
+
+    noteworthy.sort(function (a, b) {
+      if (a.ms === null && b.ms === null) return a.index - b.index;
+      if (a.ms === null) return 1;
+      if (b.ms === null) return -1;
+      return a.ms - b.ms || a.index - b.index;
+    });
+
+    return {
+      totalEvents: events.length,
+      successfulLogons: countOf(4624),
+      failedLogons: countOf(4625),
+      accountsCreated: countOf(4720),
+      accountsDeleted: countOf(4726),
+      privilegeChanges: countOf(4728) + countOf(4732),
+      logCleared: countOf(1102),
+      processCreations: countOf(4688),
+      serviceInstalls: countOf(7045),
+      scriptBlocks: countOf(4104),
+      eventsRequiringInvestigation: Object.keys(severityByIndex).length,
+      bySeverity: (function () {
+        const totals = { Informational: 0, Low: 0, Medium: 0, High: 0 };
+        Object.keys(severityByIndex).forEach(function (index) {
+          const severity = severityByIndex[index];
+          totals[severity] = (totals[severity] || 0) + 1;
+        });
+        return totals;
+      })(),
+      severityByIndex: severityByIndex,
+      topAccounts: countEventsByAccount(events),
+      topFailedAccounts: countAccounts(events.filter(function (e) { return e.eventId === 4625; })),
+      topEventIds: topEventIds,
+      timeline: noteworthy.slice(0, 50),
+      timelineTotal: noteworthy.length,
+      timelineAvailable: events.some(function (e) { return e.timestamp && e.timestamp.valid; })
+    };
+  }
+
+  /** All accounts by event count (used by the dashboard and the filters). */
+  function countEventsByAccount(events) {
+    const totals = {};
+    (events || []).forEach(function (event) {
+      if (!event.accountKey) return;
+      if (!totals[event.accountKey]) totals[event.accountKey] = { account: event.account, count: 0 };
+      totals[event.accountKey].count++;
+    });
+    return Object.keys(totals).map(function (key) { return totals[key]; })
+      .sort(function (a, b) { return b.count - a.count || a.account.localeCompare(b.account); })
+      .slice(0, 5);
+  }
+
+  /* __CHUNK__ */
+
+  /* ------------------------------------------------------------------------
    * Running the rules
    * ------------------------------------------------------------------------
    * analyse() is deliberately separate from parse() so that the settings can be
@@ -2416,6 +2891,24 @@
       ruleResult.findings.forEach(function (f) { findings.push(f); });
       ruleResult.notes.forEach(function (n) { notes.push(n); });
     }
+
+    if (settings.rules.accountCreatedThenPrivileged) {
+      const ruleResult = analyseAccountCreatedThenPrivileged(context);
+      ruleResult.findings.forEach(function (f) { findings.push(f); });
+      ruleResult.notes.forEach(function (n) { notes.push(n); });
+    }
+
+    if (settings.rules.securityLogCleared) {
+      const ruleResult = analyseAuditLogCleared(context);
+      ruleResult.findings.forEach(function (f) { findings.push(f); });
+      ruleResult.notes.forEach(function (n) { notes.push(n); });
+    }
+
+    /* Rule 5 is a summary section rather than a finding: it never carries a
+       severity and never claims two events are related. */
+    const administrativeActivity = settings.rules.administrativeActivitySummary
+      ? summariseAdministrativeActivity(context)
+      : null;
 
     /* DE-DUPLICATION.
      * Rules are written so that one account produces one finding per activity,
@@ -2482,11 +2975,15 @@
       finding.events.forEach(function (event) { involved[event.index] = true; });
     });
 
+    const dashboard = buildDashboard(parseResult, unique, administrativeActivity);
+
     return {
       ok: true,
       settings: settings,
       findings: unique,
       notes: notes,
+      administrativeActivity: administrativeActivity,
+      dashboard: dashboard,
       stats: {
         totalFindings: unique.length,
         bySeverity: bySeverity,
@@ -2877,6 +3374,12 @@
     analyse: analyse,
     analyseRepeatedFailedLogons: analyseRepeatedFailedLogons,
     analyseFailedLogonsFollowedBySuccess: analyseFailedLogonsFollowedBySuccess,
+    analyseAccountCreatedThenPrivileged: analyseAccountCreatedThenPrivileged,
+    analyseAuditLogCleared: analyseAuditLogCleared,
+    summariseAdministrativeActivity: summariseAdministrativeActivity,
+    buildDashboard: buildDashboard,
+    countEventsByAccount: countEventsByAccount,
+    ADMIN_ACTIVITY_IDS: ADMIN_ACTIVITY_IDS,
     groupEventsByAccount: groupEventsByAccount,
     compareValues: compareValues,
     defaultSettings: defaultSettings,

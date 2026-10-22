@@ -2134,6 +2134,456 @@ test('the page shows the sequence and the source comparison', function () {
   assertIncludes(text, 'Related findings', 'the cross-reference section');
   assertIncludes(text, 'not a probability', 'the score disclaimer');
 });
+/* --------------------------------------------------------------------------
+   Tests: RULE 3 - a new account granted privileges
+   -------------------------------------------------------------------------- */
+group('Rule 3: new account granted privileges');
+
+function rule3Findings(csv, settings) {
+  return Core.analyse(Core.parse(csv), settings).findings.filter(function (f) {
+    return f.rule === 'accountCreatedThenPrivileged';
+  });
+}
+
+function createdAndAdded(groupName, options) {
+  const settings = options || {};
+  const story = [
+    'A user account was created.',
+    '',
+    'Subject:',
+    ' Account Name: ' + (settings.creator || 'labadmin'),
+    '',
+    'New Account:',
+    ' Account Name: ' + (settings.target || 'temp-admin')
+  ].join('\n');
+
+  const membership = [
+    'A member was added to a security-enabled ' + (settings.scope || 'local') + ' group.',
+    '',
+    'Member:',
+    ' Account Name: ' + (settings.target || 'temp-admin'),
+    '',
+    'Group:',
+    ' Group Name: ' + groupName,
+    ' Group Domain: BUILTIN',
+    '',
+    'Subject:',
+    ' Account Name: ' + (settings.granter || settings.creator || 'labadmin')
+  ].join('\n');
+
+  const rows = ['"Event ID","Date and Time","User","Message"'];
+  rows.push('"4624","2026-04-08T09:00:00","LAB\\' + (settings.creator || 'labadmin') + '","An account was successfully logged on."');
+  rows.push('"4720","' + (settings.createdAt !== undefined ? settings.createdAt : '2026-04-08T09:02:00') + '","LAB\\'
+    + (settings.creator || 'labadmin') + '","' + story + '"');
+  rows.push('"' + (settings.scope === 'global' ? 4728 : 4732) + '","'
+    + (settings.grantedAt !== undefined ? settings.grantedAt : '2026-04-08T09:04:00') + '","LAB\\'
+    + (settings.granter || settings.creator || 'labadmin') + '","' + membership + '"');
+  return rows.join('\n');
+}
+
+test('the persistence sample reports New Account Granted Privileges at High', function () {
+  const findings = rule3Findings(SAMPLES.persistence.csv);
+  assertEqual(findings.length, 1, 'exactly one finding');
+
+  const finding = findings[0];
+  assertEqual(finding.name, 'New Account Granted Privileges');
+  assertEqual(finding.severity, 'High');
+  assertEqual(finding.account, 'temp-admin', 'the account that was created');
+  assertEqual(finding.actor, 'labadmin', 'the account that created it');
+  assertEqual(finding.eventIds.join(','), '4720,4732');
+  assertEqual(finding.sequenceText, '4720 \u2192 4732');
+  assertIncludes(finding.observedActivity, 'Administrators', 'the group should be named');
+  assertIncludes(finding.observedActivity, '1m 35s', 'the gap between the two events');
+  assertEqual(finding.score.total, 50, 'created (+25) and privileged group change (+25)');
+  assertEqual(finding.score.factors.length, 2);
+});
+
+test('the finding never claims the creation was unauthorised', function () {
+  const finding = rule3Findings(SAMPLES.persistence.csv)[0];
+  const text = [finding.observedActivity, finding.whyItMatters, finding.benign, finding.severityReasons.join(' ')].join(' ').toLowerCase();
+
+  assert(text.indexOf('malicious') === -1, 'the tool must not call the activity malicious');
+  assertIncludes(finding.benign, 'onboarding', 'the everyday explanation should be offered');
+  assertIncludes(finding.whyItMatters, 'do not tell you which of those happened',
+    'the finding should say plainly that the events cannot establish intent');
+});
+
+test('a privileged global group also produces a High finding', function () {
+  const finding = rule3Findings(createdAndAdded('Domain Admins', { scope: 'global' }))[0];
+  assertEqual(finding.severity, 'High');
+  assertIncludes(finding.observedActivity, 'Domain Admins');
+  assertEqual(finding.eventIds.join(','), '4720,4728');
+});
+
+test('an ordinary group is reported at Medium, not High', function () {
+  const finding = rule3Findings(createdAndAdded('Users'))[0];
+  assertEqual(finding.severity, 'Medium');
+  assertIncludes(finding.severityReasons.join(' '), 'not one this tool treats as privileged');
+  assertEqual(finding.score.total, 25, 'only the account-creation contribution');
+});
+
+test('a creation with no later privilege change produces no finding', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"',
+    '"4720","2026-04-08T09:02:00","LAB\\labadmin","A user account was created.\n\nSubject:\n Account Name: labadmin\n\nNew Account:\n Account Name: temp-admin"'];
+  assertEqual(rule3Findings(rows.join('\n')).length, 0);
+});
+
+test('a privilege change with no creation produces no finding', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"',
+    '"4732","2026-04-08T09:04:00","LAB\\labadmin","A member was added to a security-enabled local group.\n\nMember:\n Account Name: temp-admin\n\nGroup:\n Group Name: Administrators\n\nSubject:\n Account Name: labadmin"'];
+  assertEqual(rule3Findings(rows.join('\n')).length, 0,
+    'Rule 3 is about a NEW account, so an existing one must not trigger it');
+});
+
+test('a privilege change for a different account is not correlated', function () {
+  const csv = createdAndAdded('Administrators', { target: 'temp-admin' })
+    .replace('Account Name: temp-admin\n\nGroup:', 'Account Name: someone-else\n\nGroup:');
+  assertEqual(rule3Findings(csv).length, 0, 'the member account must match the created account');
+});
+
+test('different creators and granters are pointed out', function () {
+  const finding = rule3Findings(createdAndAdded('Administrators', {
+    creator: 'labadmin',
+    granter: 'svc-backup'
+  }))[0];
+  assertIncludes(finding.notes.join(' '), 'Two different accounts were involved');
+  assertIncludes(finding.notes.join(' '), 'labadmin');
+  assertIncludes(finding.notes.join(' '), 'svc-backup');
+});
+
+test('missing timestamps do not stop the correlation, and are disclosed', function () {
+  const csv = createdAndAdded('Administrators', {
+    createdAt: 'not-a-date',
+    grantedAt: 'also-not-a-date'
+  });
+  const finding = rule3Findings(csv)[0];
+  assert(finding, 'the identity of the account still links the two events');
+  assertIncludes(finding.notes.join(' '), 'cannot be measured');
+  assertEqual(finding.firstMs, null, 'no time should be invented');
+});
+
+test('the mixed sample correlates helpdesk-temp with svc-backup', function () {
+  const finding = rule3Findings(SAMPLES.mixed.csv)[0];
+  assertEqual(finding.account, 'helpdesk-temp');
+  assertEqual(finding.actor, 'svc-backup');
+  assertEqual(finding.severity, 'High');
+  assertIncludes(finding.observedActivity, 'Administrators');
+});
+
+/* --------------------------------------------------------------------------
+   Tests: RULE 4 - the security audit log was cleared
+   -------------------------------------------------------------------------- */
+group('Rule 4: audit log cleared');
+
+function rule4Findings(csv) {
+  return Core.analyse(Core.parse(csv)).findings.filter(function (f) {
+    return f.rule === 'securityLogCleared';
+  });
+}
+
+test('the mixed sample reports the cleared log at High with the account named', function () {
+  const findings = rule4Findings(SAMPLES.mixed.csv);
+  assertEqual(findings.length, 1);
+
+  const finding = findings[0];
+  assertEqual(finding.name, 'Security Audit Log Cleared');
+  assertEqual(finding.severity, 'High');
+  assertEqual(finding.account, 'svc-backup');
+  assertEqual(finding.eventIds.join(','), '1102');
+  assertEqual(finding.score.total, 30);
+});
+
+test('the explanation matches what the specification asks for', function () {
+  const finding = rule4Findings(SAMPLES.mixed.csv)[0];
+  assertIncludes(finding.whyItMatters, 'can happen during legitimate maintenance');
+  assertIncludes(finding.whyItMatters, 'remove evidence');
+  assertIncludes(finding.benign, 'rebuild');
+  assert(finding.investigation.length >= 4, 'several investigation steps');
+});
+
+test('the finding records how much other activity the file still holds', function () {
+  const finding = rule4Findings(SAMPLES.mixed.csv)[0];
+  assertIncludes(finding.notes.join(' '), 'came before the log was cleared');
+  assertIncludes(finding.notes.join(' '), 'account, group or service change',
+    'the administrative activity before the clearing should be mentioned');
+});
+
+test('a file with no 1102 produces no such finding', function () {
+  assertEqual(rule4Findings(SAMPLES.normal.csv).length, 0);
+  assertEqual(rule4Findings(SAMPLES.guessing.csv).length, 0);
+});
+
+test('a 1102 with no readable account still produces a finding that says so', function () {
+  const rows = ['"Event ID","Date and Time","User","Message"',
+    '"1102","2026-04-09T02:45:00","-","The audit log was cleared."'];
+  const finding = rule4Findings(rows.join('\n'))[0];
+  assertEqual(finding.severity, 'High', 'the event is serious even without an account');
+  assertEqual(finding.account, '');
+  assertIncludes(finding.severityReasons.join(' '), 'does not name the account');
+});
+
+/* --------------------------------------------------------------------------
+   Tests: RULE 5 - administrative / privilege activity summary
+   -------------------------------------------------------------------------- */
+group('Rule 5: administrative activity summary');
+
+function adminSummaryOf(key) {
+  return Core.analyse(Core.parse(SAMPLES[key].csv)).administrativeActivity;
+}
+
+test('the mixed sample summarises its account, group, service and log changes', function () {
+  const summary = adminSummaryOf('mixed');
+  assert(summary, 'a summary should be produced');
+  assertEqual(summary.total, 5, '4720, 4732, 7045, 4726 and 1102');
+  assertEqual(summary.counts[4720], 1);
+  assertEqual(summary.counts[4732], 1);
+  assertEqual(summary.counts[7045], 1);
+  assertEqual(summary.counts[4726], 1);
+  assertEqual(summary.counts[1102], 1);
+  assertEqual(summary.privilegedChanges, 1);
+  assertEqual(summary.logCleared, 1);
+  assertIncludes(summary.actors.map(function (a) { return a.name; }).join(','), 'svc-backup');
+});
+
+test('the summary does not claim the events are related', function () {
+  const summary = adminSummaryOf('mixed');
+  assertIncludes(summary.explanation, 'not assumed to be related');
+  assertIncludes(summary.explanation, 'analyst');
+  assertEqual(summary.severity, undefined, 'a summary must not carry a severity');
+});
+
+test('the summary is in chronological order and names each account', function () {
+  const summary = adminSummaryOf('mixed');
+  const times = summary.items.map(function (item) { return item.ms; }).filter(function (ms) { return ms !== null; });
+  for (let i = 1; i < times.length; i++) {
+    assert(times[i] >= times[i - 1], 'the summary should be in time order');
+  }
+  summary.items.forEach(function (item) {
+    assert(item.title, 'each line should say what the event means');
+    assert(item.account || item.actor, 'each line should name an account');
+  });
+});
+
+test('a quiet file with no administrative events has no summary', function () {
+  assertEqual(adminSummaryOf('normal'), null, 'the normal sample has no account or group changes');
+  assertEqual(adminSummaryOf('guessing'), null, 'and neither does the guessing sample');
+});
+
+test('the persistence sample lists both of its administrative events', function () {
+  const summary = adminSummaryOf('persistence');
+  assertEqual(summary.total, 2, 'the creation and the group change');
+  assertEqual(summary.privilegedChanges, 1);
+  assertEqual(summary.actors[0].name, 'labadmin');
+});
+
+test('the summary creates no findings of its own', function () {
+  const analysis = Core.analyse(Core.parse(SAMPLES.mixed.csv), {
+    rules: {
+      repeatedFailedLogons: false,
+      failedLogonsFollowedBySuccess: false,
+      accountCreatedThenPrivileged: false,
+      securityLogCleared: false,
+      administrativeActivitySummary: true
+    }
+  });
+  assertEqual(analysis.findings.length, 0, 'the summary is a section, not an alert');
+  assert(analysis.administrativeActivity, 'but the summary is still produced');
+});
+
+/* --------------------------------------------------------------------------
+   Tests: the dashboard
+   -------------------------------------------------------------------------- */
+group('Dashboard');
+
+function dashboardOf(key, settings) {
+  return Core.analyse(Core.parse(SAMPLES[key].csv), settings).dashboard;
+}
+
+test('the dashboard counts everything the specification asks for', function () {
+  const dashboard = dashboardOf('mixed');
+  assertEqual(dashboard.totalEvents, 15);
+  assertEqual(dashboard.successfulLogons, 2);
+  assertEqual(dashboard.failedLogons, 6);
+  assertEqual(dashboard.accountsCreated, 1);
+  assertEqual(dashboard.accountsDeleted, 1);
+  assertEqual(dashboard.privilegeChanges, 1);
+  assertEqual(dashboard.logCleared, 1);
+  assertEqual(dashboard.processCreations, 1);
+  assertEqual(dashboard.serviceInstalls, 1);
+  assert(dashboard.eventsRequiringInvestigation > 0, 'some events should need investigation');
+});
+
+test('the dashboard lists top accounts, top failures, common Event IDs and priorities', function () {
+  const dashboard = dashboardOf('mixed');
+
+  assertEqual(dashboard.topAccounts[0].account, 'svc-backup', 'the busiest account');
+  assertEqual(dashboard.topAccounts[0].count, 10,
+    'six failures, the success, the process, the script block and the log clearing');
+
+  assertEqual(dashboard.topFailedAccounts[0].account, 'svc-backup');
+  assertEqual(dashboard.topFailedAccounts[0].count, 6);
+
+  assertEqual(dashboard.topEventIds[0].eventId, 4625, 'the most common Event ID');
+  assertEqual(dashboard.topEventIds[0].count, 6);
+  assertIncludes(dashboard.topEventIds[0].title, 'Failed logon', 'IDs should be explained');
+});
+
+test('the quiet sample needs no investigation', function () {
+  const dashboard = dashboardOf('normal');
+  assertEqual(dashboard.totalEvents, 15);
+  assertEqual(dashboard.failedLogons, 2);
+  assertEqual(dashboard.eventsRequiringInvestigation, 0, 'nothing should be escalated');
+  assertEqual(dashboard.accountsCreated, 0);
+  assertEqual(dashboard.bySeverity.High, 0);
+  assertEqual(dashboard.bySeverity.Medium, 0);
+});
+
+test('the timeline is chronological and only holds noteworthy events', function () {
+  const dashboard = dashboardOf('mixed');
+  assert(dashboard.timelineAvailable, 'this sample has readable timestamps');
+  assert(dashboard.timeline.length > 0, 'the timeline should not be empty');
+
+  const times = dashboard.timeline.map(function (item) { return item.ms; }).filter(function (ms) { return ms !== null; });
+  for (let i = 1; i < times.length; i++) {
+    assert(times[i] >= times[i - 1], 'timeline entries should be in time order');
+  }
+
+  const reasons = dashboard.timeline.map(function (item) { return item.reason; }).join(' ');
+  assertIncludes(reasons, 'New Account Granted Privileges', 'findings should be represented');
+  assertIncludes(reasons, 'Administrative or privilege activity', 'and administrative events too');
+});
+
+test('the timeline says when timestamps are unavailable', function () {
+  const rows = ['"Event ID","Date and Time","Message"',
+    '"4625","not-a-date","An account failed to log on."',
+    '"1102","also-not-a-date","The audit log was cleared."'];
+  const dashboard = Core.analyse(Core.parse(rows.join('\n'))).dashboard;
+  assertEqual(dashboard.timelineAvailable, false);
+  assert(dashboard.timeline.length >= 1, 'the events still appear, in file order');
+});
+
+/* --------------------------------------------------------------------------
+   Tests: the page renders the dashboard, the summary and the filters
+   -------------------------------------------------------------------------- */
+group('Dashboard and filters in the page');
+
+test('loading the mixed sample fills the dashboard and the administrative table', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  assert(isHidden(page.elements['dashboard-panel']) === false, 'the dashboard should be shown');
+  assertEqual(page.elements['dash-total'].textContent, '15');
+  assertEqual(page.elements['dash-failed'].textContent, '6');
+  assertEqual(page.elements['dash-created'].textContent, '1');
+  assertEqual(page.elements['dash-cleared'].textContent, '1');
+  assert(Number(page.elements['dash-investigate'].textContent) > 0, 'events needing investigation');
+
+  assert(page.elements['dash-top-accounts'].children.length > 0, 'top accounts should be listed');
+  assert(page.elements['dash-top-failures'].children.length > 0, 'top failures should be listed');
+  assert(page.elements['dash-top-ids'].children.length > 0, 'common Event IDs should be listed');
+  assert(page.elements['dash-timeline-body'].children.length > 0, 'the timeline should have rows');
+
+  assert(isHidden(page.elements['admin-panel']) === false, 'the administrative section should be shown');
+  assertEqual(page.elements['admin-body'].children.length, 5, 'five administrative events');
+  assertIncludes(page.elements['admin-explanation'].textContent, 'not assumed to be related',
+    'the limitation must be visible');
+});
+
+test('the quiet sample shows a dashboard with nothing to investigate', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.normal.buttonId].listeners.click || [])[0]();
+
+  assertEqual(page.elements['dash-investigate'].textContent, '0');
+  assertEqual(page.elements['dash-failed'].textContent, '2');
+  assert(isHidden(page.elements['admin-panel']), 'no administrative section for a quiet file');
+});
+
+test('the filter controls are filled from the loaded data', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  assert(page.elements['filter-eventid'].children.length > 1, 'Event ID options');
+  assert(page.elements['filter-account'].children.length > 1, 'account options');
+  assert(page.elements['filter-ip'].children.length > 1, 'source address options');
+  assert(page.elements['filter-category'].children.length > 1, 'event type options');
+
+  const ids = page.elements['filter-eventid'].children.map(function (option) { return option.value; });
+  assertIncludes(ids.join(','), '4625', 'Event ID 4625 should be selectable');
+});
+
+test('filtering by Event ID narrows the table and updates the count', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  assertEqual(page.elements['events-body'].children.length, 15, 'all events are listed initially');
+  assertIncludes(page.elements['filter-count'].textContent, 'No filters applied');
+
+  page.elements['filter-eventid'].value = '4625';
+  (page.elements['filter-eventid'].listeners.change || [])[0]();
+
+  assertEqual(page.elements['events-body'].children.length, 6, 'only the six failures');
+  assertIncludes(page.elements['filter-count'].textContent, 'Showing 6 of 15');
+});
+
+test('filtering by account, priority and source address all work together', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  page.elements['filter-account'].value = 'svc-backup';
+  (page.elements['filter-account'].listeners.change || [])[0]();
+  assertEqual(page.elements['events-body'].children.length, 10, 'everything attributed to svc-backup');
+
+  page.elements['filter-severity'].value = 'High';
+  (page.elements['filter-severity'].listeners.change || [])[0]();
+  const highRows = page.elements['events-body'].children.length;
+  assert(highRows > 0 && highRows < 10, 'the High filter should narrow it further');
+
+  page.elements['filter-ip'].value = '198.51.100.23';
+  (page.elements['filter-ip'].listeners.change || [])[0]();
+  assert(page.elements['events-body'].children.length > 0, 'the address filter should still match rows');
+  assertIncludes(page.elements['filter-count'].textContent, 'after filtering');
+});
+
+test('the search box matches account, computer and message text', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  page.elements['filter-search'].value = 'helpdesk-temp';
+  (page.elements['filter-search'].listeners.input || [])[0]();
+  assert(page.elements['events-body'].children.length >= 2, 'the created account appears in several events');
+
+  page.elements['filter-search'].value = 'no-such-text-anywhere';
+  (page.elements['filter-search'].listeners.input || [])[0]();
+  assertIncludes(textOf(page.elements['events-body']), 'No events match');
+});
+
+test('clearing the filters restores the full list', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  page.elements['filter-eventid'].value = '1102';
+  (page.elements['filter-eventid'].listeners.change || [])[0]();
+  assertEqual(page.elements['events-body'].children.length, 1);
+
+  (page.elements['btn-clear-filters'].listeners.click || [])[0]();
+  assertEqual(page.elements['events-body'].children.length, 15);
+  assertEqual(page.elements['filter-eventid'].value, '');
+});
+
+test('filters never change the findings', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  const findingsBefore = page.elements['findings-list'].children.length;
+
+  page.elements['filter-eventid'].value = '4624';
+  (page.elements['filter-eventid'].listeners.change || [])[0]();
+  page.elements['filter-search'].value = 'nothing-matches-this';
+  (page.elements['filter-search'].listeners.input || [])[0]();
+
+  assertEqual(page.elements['findings-list'].children.length, findingsBefore,
+    'the report must not change because the event table is filtered');
+});
 });
 });
 

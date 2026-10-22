@@ -78,7 +78,8 @@
     isDemo: false,
     result: null,    // the object returned by Core.parse()
     settings: null,  // analysis settings, session only
-    analysis: null   // the object returned by Core.analyse()
+    analysis: null,  // the object returned by Core.analyse()
+    filters: { eventId: '', account: '', severity: '', sourceIp: '', category: '', search: '' }
   };
 
   /* Cached elements */
@@ -93,6 +94,13 @@
       'warning-region', 'warning-list', 'preview-body', 'demo-chip', 'demo-hint', 'demo-info',
       'recognition-body', 'unrecognised-note',
       'findings-panel', 'findings-summary', 'findings-list', 'analysis-notes', 'analysis-notes-list',
+      'dashboard-panel', 'dash-total', 'dash-success', 'dash-failed', 'dash-created', 'dash-priv',
+      'dash-cleared', 'dash-process', 'dash-investigate', 'dash-top-accounts', 'dash-top-failures',
+      'dash-top-ids', 'dash-severity', 'dash-timeline-body', 'dash-timeline-note',
+      'admin-panel', 'admin-summary', 'admin-explanation', 'admin-body',
+      'explorer-panel', 'filter-eventid', 'filter-account', 'filter-severity', 'filter-ip',
+      'filter-category', 'filter-search', 'btn-clear-filters', 'filter-count', 'events-body',
+      'events-limit-note',
       'settings-panel', 'setting-threshold', 'setting-window', 'setting-use-window', 'window-status',
       'btn-apply-settings', 'btn-reset-settings',
       'footer-version',
@@ -234,6 +242,10 @@
     renderParseSummary(result);
     renderRecognition(result);
     renderPreview(result);
+
+    // Rebuild the filter choices for the new file, and start with no filters.
+    state.filters = { eventId: '', account: '', severity: '', sourceIp: '', category: '', search: '' };
+    populateFilterOptions(result);
 
     // Run the detection rules on the freshly parsed data.
     runAnalysis();
@@ -685,6 +697,351 @@
   }
 
   /* ------------------------------------------------------------------------
+   * Dashboard
+   * ------------------------------------------------------------------------
+   * The tiles are plain counts. The bar lists show relative sizes only, and each
+   * one states its numbers in text as well, so nothing depends on reading a bar.
+   */
+  function renderBarList(node, items, emptyText, labelOf) {
+    if (!node) return;
+    clear(node);
+
+    if (!items.length) {
+      node.appendChild(el('li', 'bar-list__empty', emptyText));
+      return;
+    }
+
+    const max = Math.max.apply(null, items.map(function (item) { return item.value; })) || 1;
+    items.forEach(function (item) {
+      const li = el('li', 'bar-item');
+      const head = el('div', 'bar-item__head');
+      head.appendChild(el('span', 'bar-item__label', labelOf(item)));
+      head.appendChild(el('span', 'bar-item__value', String(item.value)));
+      li.appendChild(head);
+
+      const track = el('div', 'bar-item__track');
+      const fill = el('div', 'bar-item__fill');
+      fill.setAttribute('style', 'width:' + Math.max(3, Math.round((item.value / max) * 100)) + '%');
+      track.appendChild(fill);
+      li.appendChild(track);
+
+      node.appendChild(li);
+    });
+  }
+
+  function renderDashboard() {
+    const dashboard = state.analysis && state.analysis.dashboard;
+    if (!dashboard) return;
+
+    setHidden(dom['dashboard-panel'], false);
+
+    const set = function (id, value) {
+      if (dom[id]) dom[id].textContent = String(value);
+    };
+    set('dash-total', dashboard.totalEvents);
+    set('dash-success', dashboard.successfulLogons);
+    set('dash-failed', dashboard.failedLogons);
+    set('dash-created', dashboard.accountsCreated);
+    set('dash-priv', dashboard.privilegeChanges);
+    set('dash-cleared', dashboard.logCleared);
+    set('dash-process', dashboard.processCreations);
+    set('dash-investigate', dashboard.eventsRequiringInvestigation);
+
+    renderBarList(dom['dash-top-accounts'],
+      dashboard.topAccounts.map(function (item) { return { label: item.account, value: item.count }; }),
+      'No account names were found in this file.',
+      function (item) { return item.label; });
+
+    renderBarList(dom['dash-top-failures'],
+      dashboard.topFailedAccounts.map(function (item) { return { label: item.account, value: item.count }; }),
+      'No failed logons in this file.',
+      function (item) { return item.label; });
+
+    renderBarList(dom['dash-top-ids'],
+      dashboard.topEventIds.map(function (item) { return { label: item.eventId + ' - ' + item.title, value: item.count }; }),
+      'No events in this file.',
+      function (item) { return item.label; });
+
+    const severities = ['High', 'Medium', 'Low', 'Informational'];
+    renderBarList(dom['dash-severity'],
+      severities.map(function (severity) {
+        return { label: severity, value: dashboard.bySeverity[severity] || 0 };
+      }),
+      'No events in this file.',
+      function (item) { return item.label; });
+
+    const body = dom['dash-timeline-body'];
+    clear(body);
+    dashboard.timeline.forEach(function (item) {
+      const tr = el('tr');
+      tr.appendChild(el('td', 'cell-mono', item.iso || 'no timestamp'));
+      tr.appendChild(el('td', 'cell-mono', String(item.eventId)));
+      tr.appendChild(el('td', null, item.title));
+      tr.appendChild(el('td', null, item.account || '(not named)'));
+      tr.appendChild(el('td', null, item.reason));
+      body.appendChild(tr);
+    });
+    if (!dashboard.timeline.length) {
+      const tr = el('tr');
+      const td = el('td', 'table-empty', 'Nothing noteworthy to place on a timeline.');
+      td.colSpan = 5;
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+
+    const note = dom['dash-timeline-note'];
+    if (note) {
+      if (!dashboard.timelineAvailable) {
+        note.textContent = 'No readable timestamps were found, so this list follows the order of the rows in the file rather than time order.';
+        setHidden(note, false);
+      } else if (dashboard.timelineTotal > dashboard.timeline.length) {
+        note.textContent = 'Showing the first ' + dashboard.timeline.length + ' of '
+          + dashboard.timelineTotal + ' noteworthy events.';
+        setHidden(note, false);
+      } else {
+        setHidden(note, true);
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+   * Administrative / privilege activity
+   * ------------------------------------------------------------------------
+   * A summary, not a finding: no severity, and no claim that the events are
+   * related. The explanation above the table says that explicitly, because a list
+   * of administrative events is exactly where a beginner is most likely to assume
+   * a connection that the data does not support.
+   */
+  function renderAdministrativeActivity() {
+    const summary = state.analysis && state.analysis.administrativeActivity;
+
+    if (!summary) {
+      setHidden(dom['admin-panel'], true);
+      return;
+    }
+
+    setHidden(dom['admin-panel'], false);
+
+    if (dom['admin-summary']) {
+      dom['admin-summary'].textContent = plural(summary.total, 'event')
+        + ' changed an account, a group, a service or the audit log in this file'
+        + (summary.privilegedChanges ? ', including ' + plural(summary.privilegedChanges, 'change') + ' to a privileged group' : '')
+        + (summary.logCleared ? ', and the audit log was cleared' : '') + '.';
+    }
+
+    if (dom['admin-explanation']) {
+      dom['admin-explanation'].textContent = summary.explanation
+        + (summary.actors.length > 1
+          ? ' The activity involves ' + plural(summary.actors.length, 'different account') + ': '
+            + summary.actors.map(function (actor) { return actor.name + ' (' + actor.count + ')'; }).join(', ') + '.'
+          : '');
+    }
+
+    const body = dom['admin-body'];
+    clear(body);
+    summary.items.forEach(function (item) {
+      const tr = el('tr');
+      tr.appendChild(el('td', 'cell-mono', item.iso || 'no timestamp'));
+      tr.appendChild(el('td', 'cell-mono', String(item.eventId)));
+      tr.appendChild(el('td', null, item.title));
+      tr.appendChild(el('td', null, item.account || '(not named)'));
+      tr.appendChild(el('td', null, item.actor || '(not named)'));
+      tr.appendChild(el('td', null, item.detail || '-'));
+      tr.appendChild(el('td', 'cell-mono', String(item.line)));
+      body.appendChild(tr);
+    });
+  }
+
+  /* ------------------------------------------------------------------------
+   * Filters and the event explorer
+   * ------------------------------------------------------------------------
+   * Filters narrow what is DISPLAYED. They never change the analysis: the findings
+   * were computed from the whole file, and hiding rows here cannot make a finding
+   * disappear, which would be a confusing thing for a teaching tool to do.
+   */
+  const MAX_EXPLORER_ROWS = 500;
+
+  function populateFilterOptions(result) {
+    const events = result.events || [];
+
+    const idCounts = {};
+    events.forEach(function (event) { idCounts[event.eventId] = (idCounts[event.eventId] || 0) + 1; });
+    const idSelect = dom['filter-eventid'];
+    if (idSelect) {
+      clear(idSelect);
+      const allIds = el('option', null, 'All Event IDs');
+      allIds.value = '';
+      idSelect.appendChild(allIds);
+      Object.keys(idCounts).map(Number).sort(function (a, b) { return a - b; }).forEach(function (id) {
+        const info = Core.getEventInfo(id);
+        const option = el('option', null, id + (info ? ' - ' + info.title : ' - not explained') + ' (' + idCounts[id] + ')');
+        option.value = String(id);
+        idSelect.appendChild(option);
+      });
+    }
+
+    /* Accounts use the grouping key as the value, so the filter matches the same
+       account regardless of domain prefix or letter case. */
+    const accounts = {};
+    events.forEach(function (event) {
+      if (!event.accountKey) return;
+      accounts[event.accountKey] = event.account;
+    });
+    const accountSelect = dom['filter-account'];
+    if (accountSelect) {
+      clear(accountSelect);
+      const all = el('option', null, 'All accounts');
+      all.value = '';
+      accountSelect.appendChild(all);
+      Object.keys(accounts).sort().forEach(function (key) {
+        const option = el('option', null, accounts[key]);
+        option.value = key;
+        accountSelect.appendChild(option);
+      });
+    }
+
+    const addresses = {};
+    events.forEach(function (event) {
+      const ip = event.fields && event.fields.sourceIp;
+      if (ip) addresses[ip] = true;
+    });
+    const ipSelect = dom['filter-ip'];
+    if (ipSelect) {
+      clear(ipSelect);
+      const all = el('option', null, 'All source addresses');
+      all.value = '';
+      ipSelect.appendChild(all);
+      Object.keys(addresses).sort().forEach(function (ip) {
+        const option = el('option', null, ip);
+        option.value = ip;
+        ipSelect.appendChild(option);
+      });
+    }
+
+    const categories = {};
+    events.forEach(function (event) {
+      if (event.category) categories[event.category] = true;
+    });
+    const categorySelect = dom['filter-category'];
+    if (categorySelect) {
+      clear(categorySelect);
+      const all = el('option', null, 'All event types');
+      all.value = '';
+      categorySelect.appendChild(all);
+      Object.keys(categories).sort().forEach(function (category) {
+        const option = el('option', null, category);
+        option.value = category;
+        categorySelect.appendChild(option);
+      });
+    }
+  }
+
+  function readFilters() {
+    state.filters = {
+      eventId: dom['filter-eventid'] ? dom['filter-eventid'].value : '',
+      account: dom['filter-account'] ? dom['filter-account'].value : '',
+      severity: dom['filter-severity'] ? dom['filter-severity'].value : '',
+      sourceIp: dom['filter-ip'] ? dom['filter-ip'].value : '',
+      category: dom['filter-category'] ? dom['filter-category'].value : '',
+      search: dom['filter-search'] ? dom['filter-search'].value : ''
+    };
+    return state.filters;
+  }
+
+  /** The priority an event carries: its worst finding, or its own base severity. */
+  function currentSeverityFor(event) {
+    const dashboard = state.analysis && state.analysis.dashboard;
+    if (dashboard && dashboard.severityByIndex && dashboard.severityByIndex[event.index]) {
+      return dashboard.severityByIndex[event.index];
+    }
+    return event.baseSeverity || 'Informational';
+  }
+
+  function renderExplorer() {
+    if (!state.result || !state.result.ok) return;
+    setHidden(dom['explorer-panel'], false);
+
+    const filters = state.filters;
+    const search = (filters.search || '').trim().toLowerCase();
+    const events = state.result.events || [];
+
+    const matches = events.filter(function (event) {
+      if (filters.eventId && String(event.eventId) !== filters.eventId) return false;
+      if (filters.account && event.accountKey !== filters.account) return false;
+      if (filters.severity && currentSeverityFor(event) !== filters.severity) return false;
+      if (filters.sourceIp && (event.fields.sourceIp || '') !== filters.sourceIp) return false;
+      if (filters.category && event.category !== filters.category) return false;
+      if (search) {
+        const haystack = [event.account, event.computer, event.message,
+          event.fields.sourceIp, event.title].join(' ').toLowerCase();
+        if (haystack.indexOf(search) === -1) return false;
+      }
+      return true;
+    });
+
+    const body = dom['events-body'];
+    clear(body);
+
+    matches.slice(0, MAX_EXPLORER_ROWS).forEach(function (event) {
+      const severity = currentSeverityFor(event);
+      const tr = el('tr');
+
+      tr.appendChild(el('td', 'cell-mono',
+        event.timestamp && event.timestamp.valid
+          ? Core.toIsoString(event.timestamp.ms)
+          : ((event.timestamp && event.timestamp.raw) || '-')));
+      tr.appendChild(el('td', 'cell-mono', String(event.eventId)));
+      tr.appendChild(el('td', null, event.title));
+      tr.appendChild(el('td', null, event.account || '(not named)'));
+      tr.appendChild(el('td', null, event.computer || '-'));
+      tr.appendChild(el('td', 'cell-mono', event.fields.sourceIp || '-'));
+
+      const severityCell = el('td');
+      severityCell.appendChild(el('span', 'badge ' + severityClass(severity), severity));
+      tr.appendChild(severityCell);
+
+      tr.appendChild(el('td', 'cell-message', shorten(event.message, 140) || '-'));
+      body.appendChild(tr);
+    });
+
+    if (!matches.length) {
+      const tr = el('tr');
+      const td = el('td', 'table-empty', 'No events match these filters.');
+      td.colSpan = 8;
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+
+    const anyFilter = filters.eventId || filters.account || filters.severity
+      || filters.sourceIp || filters.category || search;
+
+    if (dom['filter-count']) {
+      dom['filter-count'].textContent = 'Showing ' + matches.length + ' of '
+        + plural(events.length, 'event') + (anyFilter ? ' after filtering.' : '. No filters applied.');
+    }
+
+    const note = dom['events-limit-note'];
+    if (note) {
+      if (matches.length > MAX_EXPLORER_ROWS) {
+        note.textContent = 'Only the first ' + MAX_EXPLORER_ROWS + ' matching events are shown, to keep the page responsive. '
+          + 'Narrow the filters to see a specific part of the file.';
+        setHidden(note, false);
+      } else {
+        setHidden(note, true);
+      }
+    }
+  }
+
+  function clearFilters() {
+    state.filters = { eventId: '', account: '', severity: '', sourceIp: '', category: '', search: '' };
+    ['filter-eventid', 'filter-account', 'filter-severity', 'filter-ip', 'filter-category'].forEach(function (id) {
+      if (dom[id]) dom[id].value = '';
+    });
+    if (dom['filter-search']) dom['filter-search'].value = '';
+    renderExplorer();
+  }
+
+  /* ------------------------------------------------------------------------
    * Clearing everything
    * ------------------------------------------------------------------------
    * Because nothing is stored, "clearing" really does mean the data is gone:
@@ -786,6 +1143,9 @@
     if (!state.result || !state.result.ok) return;
     state.analysis = Core.analyse(state.result, state.settings);
     renderFindings();
+    renderDashboard();
+    renderAdministrativeActivity();
+    renderExplorer();
     updateWindowStatus();
   }
 
@@ -803,6 +1163,9 @@
     setHidden(dom['warning-region'], true);
     setHidden(dom['findings-panel'], true);
     setHidden(dom['settings-panel'], true);
+    setHidden(dom['dashboard-panel'], true);
+    setHidden(dom['admin-panel'], true);
+    setHidden(dom['explorer-panel'], true);
     clearError();
     clear(dom['preview-body']);
     clear(dom['detected-columns']);
@@ -975,6 +1338,18 @@
     bindUpload();
 
     if (dom['btn-reset']) dom['btn-reset'].addEventListener('click', resetAll);
+
+    /* Filters. Applied as the user changes them, and never allowed to alter the
+       analysis itself. */
+    ['filter-eventid', 'filter-account', 'filter-severity', 'filter-ip', 'filter-category'].forEach(function (id) {
+      if (dom[id]) dom[id].addEventListener('change', function () { readFilters(); renderExplorer(); });
+    });
+    if (dom['filter-search']) {
+      dom['filter-search'].addEventListener('input', function () { readFilters(); renderExplorer(); });
+    }
+    if (dom['btn-clear-filters']) {
+      dom['btn-clear-filters'].addEventListener('click', clearFilters);
+    }
 
     /* Analysis settings. Applied on change and by the button, and re-run against
      * the data already in memory - the file is never read again. */

@@ -824,6 +824,65 @@ kbd {
 
 
 /* --------------------------------------------------------------------------
+   22c. Dashboard bars, filters and the event explorer
+   -------------------------------------------------------------------------- */
+.bar-list { list-style: none; padding: 0; margin: .3rem 0 0; display: grid; gap: .45rem; }
+.bar-list__empty { color: var(--text-faint); font-size: .86rem; margin: 0; }
+.bar-item__head {
+  display: flex;
+  gap: .5rem;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: .86rem;
+  margin-bottom: .2rem;
+}
+.bar-item__label { overflow-wrap: anywhere; }
+.bar-item__value { font-family: var(--mono); font-size: .82rem; color: var(--text-muted); white-space: nowrap; }
+.bar-item__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.bar-item__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3f6fbf, var(--accent));
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: .6rem .9rem;
+  align-items: end;
+  margin-top: .5rem;
+  padding: .8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.filters .field--grow { grid-column: span 2; min-width: 220px; }
+.filters select,
+.filters input[type="search"] {
+  font: inherit;
+  font-size: .9rem;
+  padding: .4rem .5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+  max-width: none;
+}
+.filters__actions { display: flex; align-items: end; }
+.filters__actions .btn { width: 100%; }
+
+@media (max-width: 620px) {
+  .filters { grid-template-columns: 1fr; }
+  .filters .field--grow { grid-column: span 1; }
+}
+
+/* --------------------------------------------------------------------------
    23. Settings form
    -------------------------------------------------------------------------- */
 .settings-grid {

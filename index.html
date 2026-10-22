@@ -298,6 +298,72 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
   </section>
 
   <!-- ===================================================================
+       Dashboard
+       =================================================================== -->
+  <section class="panel" id="dashboard-panel" hidden aria-labelledby="dashboard-heading">
+    <h2 class="panel__heading" id="dashboard-heading">
+      <span aria-hidden="true">&#128202;</span> Dashboard
+    </h2>
+    <p class="panel__lede">
+      What this file contains, at a glance. The counts describe the data; the priority tiles describe
+      how much attention the analysis suggests, not how likely anything is.
+    </p>
+
+    <div class="grid grid--stats">
+      <div class="stat stat--accent"><span class="stat__value" id="dash-total">0</span><span class="stat__label">Total events</span></div>
+      <div class="stat"><span class="stat__value" id="dash-success">0</span><span class="stat__label">Successful logons</span></div>
+      <div class="stat"><span class="stat__value" id="dash-failed">0</span><span class="stat__label">Failed logons</span></div>
+      <div class="stat"><span class="stat__value" id="dash-created">0</span><span class="stat__label">Accounts created</span></div>
+      <div class="stat"><span class="stat__value" id="dash-priv">0</span><span class="stat__label">Privilege changes</span></div>
+      <div class="stat"><span class="stat__value" id="dash-cleared">0</span><span class="stat__label">Audit log cleared</span></div>
+      <div class="stat"><span class="stat__value" id="dash-process">0</span><span class="stat__label">Process creation</span></div>
+      <div class="stat stat--high"><span class="stat__value" id="dash-investigate">0</span><span class="stat__label">Events requiring investigation</span></div>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <h3 class="card__heading">Top accounts by event count</h3>
+        <ul class="bar-list" id="dash-top-accounts"></ul>
+      </div>
+      <div class="card">
+        <h3 class="card__heading">Accounts with the most failed logons</h3>
+        <ul class="bar-list" id="dash-top-failures"></ul>
+      </div>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <h3 class="card__heading">Most common Event IDs</h3>
+        <ul class="bar-list" id="dash-top-ids"></ul>
+      </div>
+      <div class="card">
+        <h3 class="card__heading">Events by priority</h3>
+        <ul class="bar-list" id="dash-severity"></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="card__heading">Timeline of noteworthy activity</h3>
+      <div class="table-scroll">
+        <table class="data-table data-table--compact">
+          <caption class="sr-only">Noteworthy events in chronological order</caption>
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Event ID</th>
+              <th scope="col">What it means</th>
+              <th scope="col">Account</th>
+              <th scope="col">Why it is here</th>
+            </tr>
+          </thead>
+          <tbody id="dash-timeline-body"></tbody>
+        </table>
+      </div>
+      <p class="card__note" id="dash-timeline-note" hidden></p>
+    </div>
+  </section>
+
+  <!-- ===================================================================
        Findings
        =================================================================== -->
   <section class="panel" id="findings-panel" hidden aria-labelledby="findings-heading">
@@ -318,6 +384,106 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
       not prove malicious behaviour. The investigation score is a way of putting findings in an
       order &mdash; it is <strong>not</strong> a probability of compromise.
     </p>
+  </section>
+
+  <!-- ===================================================================
+       Administrative / privilege activity (Rule 5 summary)
+       =================================================================== -->
+  <section class="panel" id="admin-panel" hidden aria-labelledby="admin-heading">
+    <h2 class="panel__heading" id="admin-heading">
+      <span aria-hidden="true">&#128451;</span> Administrative / Privilege Activity
+    </h2>
+    <p class="panel__lede" id="admin-summary"></p>
+    <p class="card__note" id="admin-explanation"></p>
+
+    <div class="table-scroll">
+      <table class="data-table data-table--compact">
+        <caption class="sr-only">Account, group, service and audit-log changes in this file</caption>
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Event ID</th>
+            <th scope="col">What it means</th>
+            <th scope="col">Account involved</th>
+            <th scope="col">Performed by</th>
+            <th scope="col">Detail</th>
+            <th scope="col">File line</th>
+          </tr>
+        </thead>
+        <tbody id="admin-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       Filters and event explorer
+       =================================================================== -->
+  <section class="panel" id="explorer-panel" hidden aria-labelledby="explorer-heading">
+    <h2 class="panel__heading" id="explorer-heading">
+      <span aria-hidden="true">&#128269;</span> All events, with filters
+    </h2>
+    <p class="panel__lede">
+      Every event the tool read, so you can check the analysis for yourself. Filters only change what
+      is shown here &mdash; they never change the findings.
+    </p>
+
+    <div class="filters" role="search" aria-label="Filter the event list">
+      <div class="field">
+        <label for="filter-eventid">Event ID</label>
+        <select id="filter-eventid"><option value="">All Event IDs</option></select>
+      </div>
+      <div class="field">
+        <label for="filter-account">Account</label>
+        <select id="filter-account"><option value="">All accounts</option></select>
+      </div>
+      <div class="field">
+        <label for="filter-severity">Priority</label>
+        <select id="filter-severity">
+          <option value="">All priorities</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+          <option value="Informational">Informational</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filter-ip">Source IP</label>
+        <select id="filter-ip"><option value="">All source addresses</option></select>
+      </div>
+      <div class="field">
+        <label for="filter-category">Event type</label>
+        <select id="filter-category"><option value="">All event types</option></select>
+      </div>
+      <div class="field field--grow">
+        <label for="filter-search">Search</label>
+        <input type="search" id="filter-search" placeholder="account, computer or message text">
+      </div>
+      <div class="filters__actions">
+        <button type="button" class="btn btn--ghost" id="btn-clear-filters">Clear filters</button>
+      </div>
+    </div>
+
+    <p class="status" id="filter-count" role="status" aria-live="polite"></p>
+
+    <div class="table-scroll">
+      <table class="data-table">
+        <caption>Events read from the file, after filtering</caption>
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Event ID</th>
+            <th scope="col">What it means</th>
+            <th scope="col">Account</th>
+            <th scope="col">Computer</th>
+            <th scope="col">Source IP</th>
+            <th scope="col">Priority</th>
+            <th scope="col">Message (shortened)</th>
+          </tr>
+        </thead>
+        <tbody id="events-body"></tbody>
+      </table>
+    </div>
+    <p class="card__note" id="events-limit-note" hidden></p>
   </section>
 
   <!-- ===================================================================
