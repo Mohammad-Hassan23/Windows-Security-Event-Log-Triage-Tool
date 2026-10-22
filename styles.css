@@ -378,6 +378,14 @@ kbd {
 .drop-zone__hint { color: var(--text-muted); font-size: .85rem; }
 .drop-zone__label .btn { pointer-events: none; } /* the label itself is the control */
 
+/* The file input is visually hidden but still focusable, so the keyboard focus
+   must be shown on the visible drop zone instead. Without this, a keyboard user
+   would tab to the upload control and see nothing. */
+.drop-zone:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(76, 141, 255, .45);
+}
+
 .upload__privacy {
   display: flex;
   align-items: flex-start;

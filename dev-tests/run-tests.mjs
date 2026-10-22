@@ -230,6 +230,13 @@ test('header name variants all map to Event ID', function () {
   });
 });
 
+test('a file with only a header row explains that there is nothing to analyse', function () {
+  const result = Core.parse('"Event ID","Date and Time","Message"');
+  assert(result.ok, 'the header is still readable');
+  assertEqual(result.stats.events, 0);
+  assert(codesOf(result.warnings).indexOf('NO_DATA_ROWS') !== -1, 'the empty file should be explained');
+});
+
 test('a file with no recognisable headers does not throw', function () {
   const info = Core.mapColumns(['Totally Unrelated', 'Another One']);
   assertEqual(info.matched.length, 0);
@@ -2584,6 +2591,86 @@ test('filters never change the findings', function () {
   assertEqual(page.elements['findings-list'].children.length, findingsBefore,
     'the report must not change because the event table is filtered');
 });
+/* --------------------------------------------------------------------------
+   Tests: accessibility and markup hygiene
+   --------------------------------------------------------------------------
+   These catch the problems you cannot see: a missing page heading, a label that
+   points at nothing, a control with no label, or an ARIA reference to an id that
+   does not exist.
+   -------------------------------------------------------------------------- */
+group('Accessibility and markup');
+
+test('the page has exactly one top-level heading', function () {
+  const html = readSource('index.html');
+  const h1s = Array.from(html.matchAll(/<h1[\s>]/g));
+  assertEqual(h1s.length, 1, 'a page should have exactly one h1');
+});
+
+test('no element id is defined twice', function () {
+  const html = readSource('index.html');
+  const ids = Array.from(html.matchAll(/\sid="([^"]+)"/g)).map(function (m) { return m[1]; });
+  const seen = {};
+  const duplicates = [];
+  ids.forEach(function (id) {
+    if (seen[id]) duplicates.push(id);
+    seen[id] = true;
+  });
+  assertEqual(duplicates.join(','), '', 'duplicate ids break labels, focus and scripts');
+});
+
+test('every ARIA reference points at an element that exists', function () {
+  const html = readSource('index.html');
+  const ids = new Set(Array.from(html.matchAll(/\sid="([^"]+)"/g)).map(function (m) { return m[1]; }));
+  const refs = Array.from(html.matchAll(/aria-(?:labelledby|describedby)="([^"]+)"/g))
+    .flatMap(function (m) { return m[1].split(/\s+/); });
+  assert(refs.length > 5, 'the page should be using aria-labelledby');
+  const dangling = refs.filter(function (ref) { return !ids.has(ref); });
+  assertEqual(dangling.join(','), '', 'these ARIA references point at missing ids');
+});
+
+test('every form control has a real label', function () {
+  const html = readSource('index.html');
+  const labels = new Set(Array.from(html.matchAll(/<label[^>]*for="([^"]+)"/g)).map(function (m) { return m[1]; }));
+  const controls = Array.from(html.matchAll(/<(input|select|textarea)[^>]*id="([^"]+)"/g))
+    .map(function (m) { return { tag: m[1], id: m[2] }; });
+
+  assert(controls.length >= 8, 'the page has several controls to check');
+  const unlabelled = controls.filter(function (control) { return !labels.has(control.id); });
+  assertEqual(unlabelled.map(function (c) { return c.tag + '#' + c.id; }).join(','), '',
+    'every control needs a label');
+});
+
+test('the page does not use inline event handlers', function () {
+  const html = readSource('index.html');
+  assertNoMatch(html, /\son(click|change|input|load|error|submit)\s*=/i,
+    'inline event handlers are blocked by the CSP and are bad practice');
+});
+
+test('the upload control can be reached and its focus is visible', function () {
+  const html = readSource('index.html');
+  const css = readSource('styles.css');
+  assertIncludes(html, 'for="file-input"', 'the file input needs a label to be clickable and readable');
+  assertNoMatch(html, /id="file-input"[^>]*\shidden/, 'the input must stay focusable, not removed from the tab order');
+  assertIncludes(css, '.drop-zone:focus-within', 'keyboard focus on the hidden input must be shown');
+});
+
+test('severity is never communicated by colour alone', function () {
+  const js = readSource('script.js');
+  assertIncludes(js, "'Severity: ' + finding.severity", 'the severity word must be printed, not just coloured');
+  assertIncludes(js, 'severityClass(severity)', 'the colour class is used as well as the word');
+});
+
+test('the page uses headings, tables and lists rather than div soup', function () {
+  const html = readSource('index.html');
+  assert((html.match(/<h2/g) || []).length >= 6, 'sections should be h2 headings');
+  assert((html.match(/<table/g) || []).length >= 5, 'data should be in tables');
+  assert((html.match(/scope="col"/g) || []).length >= 20, 'table headers need a scope');
+  assert((html.match(/<caption/g) || []).length >= 5, 'tables should be captioned');
+  assertIncludes(html, 'aria-live="polite"', 'the status region should be announced politely');
+  assertIncludes(html, 'role="alert"', 'hard errors should interrupt');
+});
+
+
 });
 });
 

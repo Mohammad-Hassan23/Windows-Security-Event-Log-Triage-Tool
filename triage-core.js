@@ -22,7 +22,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0-step1';
+  const VERSION = '1.0.0';
 
   /* ------------------------------------------------------------------------
    * Safety limits
@@ -2369,7 +2369,6 @@
     return { findings: findings, notes: notes };
   }
 
-  /* __CHUNK__ */
 
   /* ------------------------------------------------------------------------
    * RULE 3 - a new account granted privileges
@@ -2844,7 +2843,6 @@
       .slice(0, 5);
   }
 
-  /* __CHUNK__ */
 
   /* ------------------------------------------------------------------------
    * Running the rules
@@ -3175,6 +3173,10 @@
     if (columnInfo.missing.indexOf('message') !== -1) {
       warnings.push(makeWarning('NO_MESSAGE_COLUMN',
         'No message column was found. Events can still be listed, but details such as source IP address, logon type and group name cannot be read out of the message text.'));
+    }
+    if (!dataRows.length) {
+      warnings.push(makeWarning('NO_DATA_ROWS',
+        'This file has a header row but no data rows, so there are no events to analyse. Check that the export actually contained events.'));
     }
     if (columnInfo.missing.indexOf('account') !== -1) {
       warnings.push(makeWarning('NO_ACCOUNT_COLUMN',
