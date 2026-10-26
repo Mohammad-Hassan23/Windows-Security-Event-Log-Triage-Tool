@@ -111,6 +111,12 @@ kbd {
 
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
+/* The HTML `hidden` attribute must always win.
+   A component that sets its own `display` (flex/grid) otherwise overrides the
+   browser's `[hidden] { display: none }`, and the element stays visible - which is
+   exactly how an "empty state" ended up showing on top of a loaded table. */
+[hidden] { display: none !important; }
+
 /* Icons ------------------------------------------------------------------ */
 .icon {
   width: 1.05em;
@@ -120,6 +126,17 @@ kbd {
   color: currentColor;
 }
 .icon--xl { width: 1.9rem; height: 1.9rem; }
+
+/* Icon sizes per context. Navigation icons sit at 18px: large enough to read,
+   small enough that they never dominate the label beside them. */
+.tab .icon { width: 18px; height: 18px; }
+.pill .icon { width: 16px; height: 16px; }
+.brand__mark .icon { width: 22px; height: 22px; }
+.section-head__title .icon { width: 20px; height: 20px; }
+.card__title .icon { width: 17px; height: 17px; }
+.stat-card__icon .icon { width: 20px; height: 20px; }
+.drop-zone__icon .icon { width: 34px; height: 34px; }
+.empty-workspace__icon .icon { width: 26px; height: 26px; }
 
 /* --------------------------------------------------------------------------
    3. Accessibility helpers
@@ -335,6 +352,18 @@ kbd {
 .tab-panel { display: grid; gap: 1rem; }
 .tab-panel[hidden] { display: none; }
 .tab-panel:focus { outline: none; }
+
+/* Allow grid/flex children to shrink below their content width.
+   Without this, a wide table (whose headers do not wrap) sets its parent's
+   min-content width, the grid track grows to match, and the whole page gains a
+   horizontal scrollbar - even though the table itself sits in a scroll container.
+   This only shows once real data is loaded, so it is easy to miss. */
+.tab-panel > *,
+.panel > *,
+.card > *,
+.upload-grid > *,
+.dash-split > *,
+.dash-triple > * { min-width: 0; }
 
 .panel {
   background: var(--surface);
@@ -797,6 +826,8 @@ kbd {
    -------------------------------------------------------------------------- */
 .table-scroll {
   overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -1343,6 +1374,9 @@ kbd {
   .brand__mark { width: 34px; height: 34px; }
   .brand__subtitle { font-size: .74rem; }
   .header-pills { width: 100%; }
+  /* The privacy pill only duplicates the "Privacy & limits" tab, so it is
+     dropped on narrow screens to save a row of header height. */
+  #btn-privacy-jump { display: none; }
   .pill { font-size: .68rem; padding: .24rem .5rem; }
   .tabs { padding: 0 .85rem; }
   .tab { font-size: .82rem; padding: .5rem .6rem .6rem; }
@@ -1350,6 +1384,9 @@ kbd {
   .app-main { padding: .85rem .85rem 2.5rem; }
   .panel { padding: .9rem .85rem 1rem; border-radius: 12px; }
   .privacy-strip__inner { padding: .45rem .85rem; font-size: .78rem; }
+  /* The lock is decorative; dropping it keeps the sentence on its own line
+     rather than letting the icon wrap above it. */
+  .privacy-strip__inner > .icon { display: none; }
   .privacy-strip__details { margin-left: 0; width: 100%; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
   .stat-card__value { font-size: 1.3rem; }

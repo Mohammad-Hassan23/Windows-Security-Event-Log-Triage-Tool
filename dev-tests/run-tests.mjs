@@ -2808,6 +2808,76 @@ test('long finding sections are collapsible but still present', function () {
 });
 
 
+/* --------------------------------------------------------------------------
+   Tests: deployment safety
+   --------------------------------------------------------------------------
+   These exist because of a real incident: the page shipped with a CSP directive
+   (`style-src 'unsafe-inline'`) that blocked styles.css, so the site rendered
+   completely unstyled - 300x150 px icons, no layout, text that looked tiny. The
+   checks below would all have failed before that was fixed.
+   -------------------------------------------------------------------------- */
+group('Deployment safety');
+
+test('the content security policy cannot block the local stylesheet', function () {
+  const html = readSource('index.html');
+  const meta = html.match(/Content-Security-Policy"\s+content="([^"]+)"/);
+  assert(meta, 'the page should declare a Content-Security-Policy');
+
+  const directives = meta[1].split(';').map(function (part) { return part.trim(); });
+  const styleSrc = directives.filter(function (d) { return d.indexOf('style-src') === 0; });
+
+  if (!styleSrc.length) return; // no style-src: stylesheets are unrestricted, which is safe here
+
+  // If style-src exists it MUST allow same-origin stylesheets.
+  styleSrc.forEach(function (directive) {
+    assert(directive.indexOf("'self'") !== -1,
+      'style-src "' + directive + '" would block styles.css - add \'self\' or remove the directive');
+  });
+});
+
+test('the content security policy still blocks outbound traffic', function () {
+  const html = readSource('index.html');
+  assertIncludes(html, "connect-src 'none'", 'fetch/XHR/WebSocket must stay blocked');
+  assertIncludes(html, "form-action 'none'", 'form submissions must stay blocked');
+  assertIncludes(html, "object-src 'none'", 'plugins must stay blocked');
+});
+
+test('every local asset the page loads exists and is not empty', function () {
+  const html = readSource('index.html');
+  const assets = Array.from(html.matchAll(/(?:href|src)="([^"#?:]+\.(?:css|js))"/g)).map(function (m) { return m[1]; });
+  assert(assets.length >= 4, 'the page should load a stylesheet and three scripts, found ' + assets.length);
+
+  assets.forEach(function (asset) {
+    const full = path.join(root, asset);
+    assert(fs.existsSync(full), asset + ' is referenced by index.html but missing on disk');
+    assert(fs.statSync(full).size > 1000, asset + ' exists but looks empty');
+  });
+});
+
+test('every icon carries explicit dimensions as a fallback', function () {
+  const html = readSource('index.html');
+  const icons = Array.from(html.matchAll(/<svg class="icon[^"]*"[^>]*>/g)).map(function (m) { return m[0]; });
+  assert(icons.length > 10, 'expected many inline icons, found ' + icons.length);
+
+  const unsized = icons.filter(function (tag) {
+    return tag.indexOf('width=') === -1 || tag.indexOf('height=') === -1;
+  });
+  assertEqual(unsized.length, 0,
+    'an <svg> without width/height defaults to 300x150px if CSS ever fails to load: ' + unsized.slice(0, 2).join(' '));
+});
+
+test('the stylesheet forces hidden elements to stay hidden', function () {
+  const css = readSource('styles.css');
+  assert(/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(css),
+    'components that set display:flex/grid would otherwise override the hidden attribute');
+});
+
+test('the stylesheet lets grid children shrink below their content width', function () {
+  const css = readSource('styles.css');
+  assertIncludes(css, 'min-width: 0',
+    'without min-width:0 a wide table forces the whole page to overflow horizontally');
+});
+
 });
 });
 

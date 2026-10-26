@@ -18,16 +18,24 @@
     form-action 'none'  -> blocks form submission to anywhere
     object/frame/base-uri 'none' -> blocks plugin, iframe and <base> tricks
 
-  We intentionally do NOT set `default-src 'none'; script-src 'self'` here,
-  because some browsers refuse to load local scripts from a file:// URL when
-  `script-src 'self'` is present, which would break opening index.html by
-  double-clicking it. README.md documents the stricter policy to use if you
-  host this as a website instead.
+  IMPORTANT - WHY THERE IS NO style-src OR script-src HERE
+  A directive such as `style-src 'unsafe-inline'` looks harmless but BLOCKS every
+  external stylesheet, because 'self' is then not allowed. That exact mistake made
+  this page render completely unstyled once it was served over HTTP: the browser
+  refused to load styles.css, so the inline SVG icons fell back to their default
+  300x150 px size and the layout collapsed. Omitting style-src/script-src keeps
+  the local files loading on both https:// and file://, while every directive that
+  actually stops data leaving the page is still enforced.
+
+  README.md documents a stricter policy (including style-src 'self' and
+  script-src 'self') to use when hosting over HTTP, where those sources resolve.
 -->
-<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'; manifest-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'; manifest-src 'none'">
 <title>Security Log Triage Lab - Windows Security Event Log Triage Tool</title>
 <meta name="description" content="Educational, offline, browser-based triage tool for Windows Security event logs exported to CSV. Files never leave your computer.">
 <link rel="stylesheet" href="styles.css">
+<!-- Inline empty icon: prevents a stray /favicon.ico request and the 404 it logs. -->
+<link rel="icon" href="data:,">
 </head>
 <body>
 
@@ -103,7 +111,7 @@
 <header class="app-header">
   <div class="app-header__bar">
     <div class="brand">
-      <span class="brand__mark"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-shield"></use></svg></span>
+      <span class="brand__mark"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-shield"></use></svg></span>
       <div class="brand__text">
         <h1 class="brand__name">Security Log Triage Lab</h1>
         <p class="brand__subtitle">Windows Security Event Log Triage Tool</p>
@@ -111,7 +119,7 @@
     </div>
     <div class="header-pills">
       <span class="pill pill--live"><span class="pill__dot" aria-hidden="true"></span>Local analysis</span>
-      <span class="pill"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>100% offline</span>
+      <span class="pill"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>100% offline</span>
       <button type="button" class="pill pill--button" id="btn-privacy-jump">Privacy &amp; limits</button>
     </div>
   </div>
@@ -119,30 +127,30 @@
   <nav class="tabs" role="tablist" aria-label="Application sections">
     <button type="button" class="tab is-active" role="tab" id="tab-dashboard"
             aria-selected="true" aria-controls="panel-dashboard" tabindex="0">
-      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-grid"></use></svg>Dashboard
+      <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-grid"></use></svg>Dashboard
     </button>
     <button type="button" class="tab" role="tab" id="tab-events"
             aria-selected="false" aria-controls="panel-events" tabindex="-1">
-      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Events
+      <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Events
     </button>
     <button type="button" class="tab" role="tab" id="tab-learn"
             aria-selected="false" aria-controls="panel-learn" tabindex="-1">
-      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Learn
+      <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Learn
     </button>
     <button type="button" class="tab" role="tab" id="tab-export"
             aria-selected="false" aria-controls="panel-export" tabindex="-1">
-      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export data
+      <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export data
     </button>
     <button type="button" class="tab" role="tab" id="tab-privacy"
             aria-selected="false" aria-controls="panel-privacy" tabindex="-1">
-      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy &amp; limits
+      <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy &amp; limits
     </button>
   </nav>
 </header>
 
 <div class="privacy-strip">
   <div class="privacy-strip__inner">
-    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
+    <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
     <p class="privacy-strip__text">
       <strong>Your Windows security logs are analysed locally in your browser and are not uploaded anywhere.</strong>
     </p>
@@ -171,7 +179,7 @@
   <section class="tab-panel" role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" tabindex="0">
 
     <div class="empty-workspace" id="workspace-empty">
-      <div class="empty-workspace__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></div>
+      <div class="empty-workspace__icon"><svg class="icon icon--xl" width="32" height="32" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></div>
       <h2 class="empty-workspace__title">No log loaded yet</h2>
       <p class="empty-workspace__text">
         Upload a Windows event export, or load one of the four fictional demo datasets to see a complete
@@ -182,7 +190,7 @@
     <section class="card upload-card" aria-labelledby="upload-heading">
       <div class="card__head">
         <h2 class="card__title" id="upload-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg>
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg>
           Analyse a log file
         </h2>
         <span class="badge badge--demo" id="demo-chip" hidden>Demo Data</span>
@@ -192,7 +200,7 @@
         <div class="drop-zone" id="drop-zone">
           <input type="file" id="file-input" class="sr-only" accept=".csv,.txt,.tsv,.log,text/csv,text/plain">
           <label for="file-input" class="drop-zone__label">
-            <span class="drop-zone__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg></span>
+            <span class="drop-zone__icon"><svg class="icon icon--xl" width="32" height="32" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg></span>
             <span class="drop-zone__title">Drop a CSV export here</span>
             <span class="drop-zone__hint">or choose a file &middot; .csv / .txt / .tsv &middot; up to 25 MB</span>
             <span class="btn btn--primary">Browse files</span>
@@ -247,49 +255,49 @@
     <section class="panel" id="dashboard-panel" hidden aria-labelledby="dashboard-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="dashboard-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"></use></svg>Overview
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-chart"></use></svg>Overview
         </h2>
         <p class="section-head__meta" id="dash-scope"></p>
       </div>
 
       <div class="stat-grid">
         <article class="stat-card stat-card--accent">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></span>
           <span class="stat-card__value" id="dash-total">0</span>
           <span class="stat-card__label">Total events</span>
         </article>
         <article class="stat-card stat-card--ok">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg></span>
           <span class="stat-card__value" id="dash-success">0</span>
           <span class="stat-card__label">Successful logons</span>
         </article>
         <article class="stat-card stat-card--warn">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></span>
           <span class="stat-card__value" id="dash-failed">0</span>
           <span class="stat-card__label">Failed logons</span>
         </article>
         <article class="stat-card">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-userplus"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-userplus"></use></svg></span>
           <span class="stat-card__value" id="dash-created">0</span>
           <span class="stat-card__label">Accounts created</span>
         </article>
         <article class="stat-card">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg></span>
           <span class="stat-card__value" id="dash-priv">0</span>
           <span class="stat-card__label">Privilege changes</span>
         </article>
         <article class="stat-card">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></span>
           <span class="stat-card__value" id="dash-cleared">0</span>
           <span class="stat-card__label">Audit log cleared</span>
         </article>
         <article class="stat-card">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></span>
           <span class="stat-card__value" id="dash-process">0</span>
           <span class="stat-card__label">Process creation</span>
         </article>
         <article class="stat-card stat-card--alert">
-          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></span>
+          <span class="stat-card__icon"><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></span>
           <span class="stat-card__value" id="dash-investigate">0</span>
           <span class="stat-card__label">Needs investigation</span>
         </article>
@@ -299,7 +307,7 @@
         <section class="card chart-card" aria-labelledby="activity-heading">
           <div class="card__head">
             <h3 class="card__title" id="activity-heading">
-              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>Event activity over time
+              <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>Event activity over time
             </h3>
             <span class="card__meta" id="dash-activity-range"></span>
           </div>
@@ -310,7 +318,7 @@
         <section class="card" aria-labelledby="priority-heading">
           <div class="card__head">
             <h3 class="card__title" id="priority-heading">
-              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Events by priority
+              <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Events by priority
             </h3>
           </div>
           <ul class="bar-list" id="dash-severity"></ul>
@@ -342,7 +350,7 @@
       <section class="card" aria-labelledby="timeline-heading">
         <div class="card__head">
           <h3 class="card__title" id="timeline-heading">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-timeline"></use></svg>Timeline of noteworthy activity
+            <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-timeline"></use></svg>Timeline of noteworthy activity
           </h3>
         </div>
         <div class="table-scroll">
@@ -368,7 +376,7 @@
     <section class="panel" id="findings-panel" hidden aria-labelledby="findings-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="findings-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Triage findings
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Triage findings
         </h2>
         <button type="button" class="btn btn--ghost btn--sm" id="btn-open-events">Open event explorer</button>
       </div>
@@ -389,7 +397,7 @@
     <section class="panel" id="admin-panel" hidden aria-labelledby="admin-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="admin-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg>Administrative / Privilege Activity
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg>Administrative / Privilege Activity
         </h2>
       </div>
       <p class="section-head__meta" id="admin-summary"></p>
@@ -416,7 +424,7 @@
 
     <details class="details-card" id="details-card">
       <summary class="details-card__summary">
-        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file"></use></svg>
+        <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-file"></use></svg>
         File details and parse check
         <span class="details-card__hint">columns understood, warnings, Event IDs recognised and a preview</span>
       </summary>
@@ -500,7 +508,7 @@
     <section class="panel" id="settings-panel" hidden aria-labelledby="settings-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="settings-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>Analysis settings
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>Analysis settings
         </h2>
       </div>
       <p class="section-head__meta">
@@ -546,7 +554,7 @@
   <section class="tab-panel" role="tabpanel" id="panel-events" aria-labelledby="tab-events" tabindex="0" hidden>
 
     <div class="empty-workspace" id="events-empty">
-      <div class="empty-workspace__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></div>
+      <div class="empty-workspace__icon"><svg class="icon icon--xl" width="32" height="32" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></div>
       <h2 class="empty-workspace__title">No events to explore yet</h2>
       <p class="empty-workspace__text">Load a CSV or a demo dataset on the Dashboard tab and the full event list will appear here.</p>
     </div>
@@ -554,7 +562,7 @@
     <section class="panel" id="explorer-panel" hidden aria-labelledby="explorer-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="explorer-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Event explorer
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Event explorer
         </h2>
         <span class="section-head__meta" id="filter-count" role="status" aria-live="polite"></span>
       </div>
@@ -629,7 +637,7 @@
     <section class="panel" aria-labelledby="soc-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="soc-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>How to think like a SOC analyst
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>How to think like a SOC analyst
         </h2>
       </div>
       <p class="section-head__meta">
@@ -657,7 +665,7 @@
     <section class="panel" aria-labelledby="ref-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="ref-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Event ID reference for beginners
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Event ID reference for beginners
         </h2>
       </div>
       <p class="section-head__meta">
@@ -740,7 +748,7 @@
     <section class="panel" aria-labelledby="export-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="export-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export Windows event data
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export Windows event data
         </h2>
       </div>
       <p class="section-head__meta">
@@ -801,7 +809,7 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
     <section class="panel" aria-labelledby="privacy-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="privacy-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy
         </h2>
       </div>
       <p class="section-head__meta">
@@ -841,7 +849,7 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
     <section class="panel" aria-labelledby="limits-heading">
       <div class="section-head">
         <h2 class="section-head__title" id="limits-heading">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>What this tool cannot do
+          <svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>What this tool cannot do
         </h2>
       </div>
       <p class="section-head__meta">Knowing the limits of a tool is part of being a good analyst.</p>

@@ -549,14 +549,36 @@ JavaScript. The rules the code follows, each enforced by an automated test:
   English with guidance.
 - A malicious cell is displayed as text. It cannot execute.
 
-**Hosting note.** `index.html` ships with a policy that blocks all network egress but does not
-restrict `script-src`, because some browsers refuse to load local scripts when `script-src 'self'`
-is set on a `file://` page. If you host the tool over HTTP(S), you can tighten it to:
+**Hosting note.** `index.html` ships with a policy that blocks all network egress but deliberately
+omits `style-src` and `script-src`. That is not an oversight: a directive such as
+`style-src 'unsafe-inline'` (without `'self'`) **blocks the local `styles.css`**, which once made the
+deployed site render completely unstyled, and `script-src 'self'` can stop local scripts loading from
+a `file://` page. Every directive that actually prevents data leaving the page is still enforced.
+
+If you host the tool over HTTP(S), where `'self'` resolves reliably, you can tighten it to:
 
 ```
 default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;
 connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'
 ```
+
+**If the page ever looks unstyled** (tiny text, giant icons, content pushed to the left), the
+stylesheet is not loading. Check, in this order:
+
+1. The browser console for `Refused to load the stylesheet ... Content Security Policy`.
+2. That `styles.css` sits next to `index.html` and was deployed with it.
+3. A hard refresh (<kbd>Ctrl</kbd>+<kbd>F5</kbd>), because GitHub Pages and browsers cache CSS
+   aggressively after a deploy.
+
+Two related pitfalls are also guarded by tests, because both caused real bugs here:
+
+- A component that sets `display: flex/grid` overrides the HTML `hidden` attribute unless the
+  stylesheet contains `[hidden] { display: none !important; }`. Without it, "empty state" panels
+  appear on top of loaded data.
+- Grid and flex children default to `min-width: auto`, so a wide table inside a scroll container can
+  still stretch the whole page and create a horizontal scrollbar. `min-width: 0` on those children
+  fixes it.
+
 
 **Accessibility.** Semantic landmarks and headings; a skip link; real `<label>` elements for every
 control; visible focus outlines; keyboard-operable file upload (drag and drop is an addition, not
@@ -578,7 +600,7 @@ because it runs the engine outside a browser.
 node dev-tests/run-tests.mjs
 ```
 
-At the time of writing this runs **182 checks**, covering:
+At the time of writing this runs **188 checks**, covering:
 
 - **CSV reading:** comma, semicolon and tab separated; byte-order marks; quoted cells with commas,
   doubled quotes and embedded newlines; PowerShell `Export-Csv` column names; UTF-16 with and
