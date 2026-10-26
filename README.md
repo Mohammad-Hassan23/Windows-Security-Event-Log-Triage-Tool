@@ -16,6 +16,7 @@ correlates the ones that belong together, and produces a SOC-style triage report
 ## Contents
 
 - [Quick start](#quick-start)
+- [The interface](#the-interface)
 - [Privacy: what happens to your logs](#privacy-what-happens-to-your-logs)
 - [What this tool is, and what it is not](#what-this-tool-is-and-what-it-is-not)
 - [Windows Event Logs in one page](#windows-event-logs-in-one-page)
@@ -55,6 +56,33 @@ browser APIs only (`FileReader`, `TextDecoder`), with no polyfills and no depend
 GitHub Pages, Netlify, Cloudflare Pages or any static host. See
 [Security and accessibility](#security-and-accessibility) for the stricter Content-Security-Policy
 to use once it is served over HTTP rather than opened from disk.
+
+---
+
+## The interface
+
+The application is a small SOC-style workspace with five tabs, not one long page.
+
+| Tab | What is there |
+|---|---|
+| **Dashboard** | Upload and demo controls, summary tiles, the event-activity chart, findings, the administrative activity table, the timeline, and (collapsed) file details and analysis settings |
+| **Events** | The filterable event explorer: every parsed event with Event ID, account, computer, source IP, priority and message |
+| **Learn** | How to think like a SOC analyst, and a plain-English reference for the ten supported Event IDs |
+| **Export data** | How to get a CSV out of Windows Event Viewer or PowerShell, with the caveats |
+| **Privacy & limits** | The privacy architecture, the disclaimer, and what the tool cannot do |
+
+The header carries the product name, a **Local analysis** indicator and a **100% offline** badge.
+A slim privacy strip sits under it on every tab, with the full explanation one click away.
+
+Before a file is loaded the dashboard shows an invitation, never placeholder numbers. Once data is
+analysed the tiles, findings and charts appear. A findings card keeps the headline facts, the
+observed activity and the score visible, and folds the benign explanation and the investigation
+steps into a single expandable section so the report stays scannable.
+
+The **event activity chart** is built from the file's own timestamps, with a bucket size chosen from
+the span (minutes, hours, days or weeks). When the timestamps are missing or ambiguous it says so
+instead of drawing a timeline it cannot trust.
+
 
 ---
 
@@ -550,7 +578,7 @@ because it runs the engine outside a browser.
 node dev-tests/run-tests.mjs
 ```
 
-At the time of writing this runs **173 checks**, covering:
+At the time of writing this runs **182 checks**, covering:
 
 - **CSV reading:** comma, semicolon and tab separated; byte-order marks; quoted cells with commas,
   doubled quotes and embedded newlines; PowerShell `Export-Csv` column names; UTF-16 with and

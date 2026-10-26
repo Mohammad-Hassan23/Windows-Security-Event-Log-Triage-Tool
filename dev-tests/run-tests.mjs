@@ -557,14 +557,17 @@ test('every element id used by the interface exists in index.html', function () 
   assertEqual(missing.join(','), '', 'these ids are used by script.js but missing from index.html');
 
   // And the other way round: ids in the page that are never referenced anywhere
-  // are usually leftovers. An id counts as used if script.js mentions it, or if
-  // index.html refers to it a second time (for example via aria-labelledby).
+  // are usually leftovers. An id counts as used if script.js mentions it, if it
+  // is referenced through an attribute such as aria-labelledby, or if it is a
+  // target of href="#..." (the inline SVG sprite works that way).
   const unused = Array.from(htmlIds).filter(function (id) {
     if (id === 'main') return false;
-    const occurrences = (html.match(new RegExp('"' + id + '"', 'g')) || []).length;
-    const referencedInHtml = occurrences > 1;
     const referencedInJs = references.indexOf("'" + id + "'") !== -1 || references.indexOf('"' + id + '"') !== -1;
-    return !referencedInHtml && !referencedInJs;
+    if (referencedInJs) return false;
+
+    // Remove the definition itself, then look for the id anywhere else.
+    const withoutDefinition = html.split('id="' + id + '"').join('');
+    return withoutDefinition.indexOf(id) === -1;
   });
   assertEqual(unused.join(','), '', 'these ids exist in index.html but are never used');
 });
@@ -591,7 +594,7 @@ test('script.js loads and initialises against a stubbed DOM without throwing', f
       childNodes: [],
       files: null,
       value: '',
-      classList: { add: function () {}, remove: function () {} },
+      classList: { add: function () {}, remove: function () {}, toggle: function () {}, contains: function () { return false; } },
       setAttribute: function () {},
       removeAttribute: function () {},
       appendChild: function () {},
@@ -667,7 +670,7 @@ function loadPage() {
       children: [],
       attributes: {},
       listeners: {},
-      classList: { add: function () {}, remove: function () {} },
+      classList: { add: function () {}, remove: function () {}, toggle: function () {}, contains: function () { return false; } },
       setAttribute: function (name, value) { node.attributes[name] = String(value); },
       getAttribute: function (name) { return node.attributes[name]; },
       removeAttribute: function (name) { delete node.attributes[name]; },
@@ -676,6 +679,7 @@ function loadPage() {
         node.children = node.children.filter(function (c) { return c !== child; });
         return child;
       },
+      focus: function () {},
       addEventListener: function (type, fn) {
         node.listeners[type] = node.listeners[type] || [];
         node.listeners[type].push(fn);
@@ -2668,6 +2672,139 @@ test('the page uses headings, tables and lists rather than div soup', function (
   assert((html.match(/<caption/g) || []).length >= 5, 'tables should be captioned');
   assertIncludes(html, 'aria-live="polite"', 'the status region should be announced politely');
   assertIncludes(html, 'role="alert"', 'hard errors should interrupt');
+});
+
+
+/* --------------------------------------------------------------------------
+   Tests: the application shell (tabs, empty states, activity chart)
+   -------------------------------------------------------------------------- */
+group('Application shell');
+
+test('the page has five tabs wired to five panels', function () {
+  const html = readSource('index.html');
+  ['dashboard', 'events', 'learn', 'export', 'privacy'].forEach(function (name) {
+    assertIncludes(html, 'id="tab-' + name + '"', 'the ' + name + ' tab should exist');
+    assertIncludes(html, 'id="panel-' + name + '"', 'the ' + name + ' panel should exist');
+    assertIncludes(html, 'aria-controls="panel-' + name + '"', 'the tab should control its panel');
+    assertIncludes(html, 'aria-labelledby="tab-' + name + '"', 'the panel should be labelled by its tab');
+  });
+  assertIncludes(html, 'role="tablist"', 'the tabs need a tablist role');
+  assertEqual((html.match(/role="tab"/g) || []).length, 5, 'exactly five tabs');
+  assertEqual((html.match(/role="tabpanel"/g) || []).length, 5, 'exactly five panels');
+});
+
+test('only the dashboard panel is visible on first load', function () {
+  const page = loadPage();
+  assertEqual(page.elements['panel-dashboard'].hidden, false, 'the dashboard is the landing tab');
+  ['panel-events', 'panel-learn', 'panel-export', 'panel-privacy'].forEach(function (id) {
+    assertEqual(page.elements[id].hidden, true, id + ' should start hidden');
+  });
+  assertEqual(page.elements['tab-dashboard'].getAttribute('aria-selected'), 'true');
+  assertEqual(page.elements['tab-events'].getAttribute('aria-selected'), 'false');
+});
+
+test('clicking a tab switches the visible panel', function () {
+  const page = loadPage();
+  const eventsTab = page.elements['tab-events'];
+  (eventsTab.listeners.click || [])[0]();
+
+  assertEqual(page.elements['panel-events'].hidden, false, 'the events panel should be shown');
+  assertEqual(page.elements['panel-dashboard'].hidden, true, 'the dashboard should be hidden');
+  assertEqual(eventsTab.getAttribute('aria-selected'), 'true');
+  assertEqual(page.elements['tab-dashboard'].getAttribute('aria-selected'), 'false');
+});
+
+test('the arrow keys move between tabs', function () {
+  const page = loadPage();
+  const keydown = (page.elements['tab-dashboard'].listeners.keydown || [])[0];
+  assert(keydown, 'the tabs should handle arrow keys');
+
+  let prevented = false;
+  keydown({ key: 'ArrowRight', preventDefault: function () { prevented = true; } });
+
+  assert(prevented, 'the default scroll behaviour should be prevented');
+  assertEqual(page.elements['panel-events'].hidden, false, 'ArrowRight should move to Events');
+
+  const eventsKeydown = (page.elements['tab-events'].listeners.keydown || [])[0];
+  eventsKeydown({ key: 'ArrowLeft', preventDefault: function () {} });
+  assertEqual(page.elements['panel-dashboard'].hidden, false, 'ArrowLeft should come back');
+});
+
+
+test('the header shortcuts jump to the right tab', function () {
+  const page = loadPage();
+
+  (page.elements['btn-privacy-jump'].listeners.click || [])[0]();
+  assertEqual(page.elements['panel-privacy'].hidden, false, 'privacy shortcut');
+
+  (page.elements['btn-goto-dashboard'].listeners.click || [])[0]();
+  assertEqual(page.elements['panel-dashboard'].hidden, false, 'export page back-link');
+
+  (page.elements['btn-open-events'].listeners.click || [])[0]();
+  assertEqual(page.elements['panel-events'].hidden, false, 'findings to events shortcut');
+});
+
+test('the invitation empty state disappears when data loads', function () {
+  const page = loadPage();
+  assert(isHidden(page.elements['workspace-empty']) === false, 'the invitation is visible at first');
+  assert(isHidden(page.elements['details-card']), 'file details are not offered before a file');
+
+  (page.elements[SAMPLES.normal.buttonId].listeners.click || [])[0]();
+
+  assert(isHidden(page.elements['workspace-empty']), 'the invitation goes away once data exists');
+  assert(isHidden(page.elements['details-card']) === false, 'file details become available');
+});
+
+test('the activity chart is drawn from real event timestamps', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  const bars = page.elements['dash-activity'].children.filter(function (node) {
+    return String(node.className).indexOf('chart__bar') !== -1;
+  });
+  assert(bars.length > 0, 'the chart should have bars');
+  bars.forEach(function (bar) {
+    assert(bar.getAttribute('aria-label'), 'each bar needs an accessible label');
+    assert(bar.getAttribute('title'), 'each bar needs a tooltip with the count');
+  });
+  assertIncludes(page.elements['dash-activity-range'].textContent, 'hourly', 'this sample spans hours');
+});
+
+test('the timeline holds only noteworthy events, not every row', function () {
+  // Nine ordinary successful logons are not noteworthy on their own.
+  const quiet = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 9; i++) {
+    quiet.push('"4624","2026-01-01T10:0' + i + ':00","LAB\\jsmith","An account was successfully logged on."');
+  }
+  const quietDashboard = Core.analyse(Core.parse(quiet.join('\n'))).dashboard;
+  assertEqual(quietDashboard.timeline.length, 0, 'nothing noteworthy, so an empty timeline');
+
+  // A burst of failures is noteworthy, so it appears.
+  const busy = ['"Event ID","Date and Time","User","Message"'];
+  for (let i = 0; i < 6; i++) {
+    busy.push('"4625","2026-01-01T10:0' + i + ':00","LAB\\jsmith","An account failed to log on."');
+  }
+  const busyDashboard = Core.analyse(Core.parse(busy.join('\n'))).dashboard;
+  assert(busyDashboard.timeline.length >= 6, 'the failures should appear on the timeline');
+});
+
+test('long finding sections are collapsible but still present', function () {
+  const page = loadPage();
+  (page.elements[SAMPLES.mixed.buttonId].listeners.click || [])[0]();
+
+  const cards = cardsTitled(page, 'New Account Granted Privileges');
+  assertEqual(cards.length, 1);
+
+  const details = [];
+  (function walk(node) {
+    if (String(node.className).indexOf('finding__details') !== -1) details.push(node);
+    (node.children || []).forEach(walk);
+  })(cards[0]);
+
+  assert(details.length >= 1, 'the finding should use a details element');
+  const text = textOf(details[0]);
+  assertIncludes(text, 'Possible benign explanation', 'the benign explanation is still there');
+  assertIncludes(text, 'Suggested investigation', 'and the investigation steps');
 });
 
 

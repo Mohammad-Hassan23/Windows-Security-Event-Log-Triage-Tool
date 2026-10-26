@@ -33,655 +33,847 @@
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
-<!-- =====================================================================
-     Header
-     ===================================================================== -->
-<header class="site-header">
-  <div class="wrap site-header__inner">
+<!-- Inline icon sprite: keeps the interface dependency-free and offline. -->
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-shield" viewBox="0 0 24 24">
+    <path d="M12 2.6 4.6 5.7v5.1c0 4.6 3.1 8.8 7.4 10.2 4.3-1.4 7.4-5.6 7.4-10.2V5.7L12 2.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="m8.7 11.9 2.3 2.3 4.4-4.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24">
+    <path d="M12 16V5m0 0-4 4m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M4.5 15v3.2c0 .7.6 1.3 1.3 1.3h12.4c.7 0 1.3-.6 1.3-1.3V15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24">
+    <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-rows" viewBox="0 0 24 24">
+    <path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-book" viewBox="0 0 24 24">
+    <path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M17 7h2v12.5h-2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  </symbol>
+  <symbol id="i-export" viewBox="0 0 24 24">
+    <path d="M12 4v10m0 0 3.5-3.5M12 14l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M5 16.5V19h14v-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24">
+    <rect x="5" y="10.5" width="14" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M8.5 10.5V8a3.5 3.5 0 1 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24">
+    <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24">
+    <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-userplus" viewBox="0 0 24 24">
+    <circle cx="10" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M4 19.5c0-3 2.7-5.2 6-5.2s6 2.2 6 5.2M18.5 7v5M16 9.5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-key" viewBox="0 0 24 24">
+    <circle cx="8.5" cy="15.5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="m11 13 8-8m-2 2 2 2m-4 0 2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24">
+    <path d="M5.5 7.5h13M9.5 7.5V5.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3v1.7M7.5 7.5l.8 11.2c0 .6.5 1.1 1.2 1.1h5c.7 0 1.2-.5 1.2-1.1l.8-11.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24">
+    <path d="M3 12.5h4l2.5-6 3.5 12 2.5-6H21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24">
+    <path d="M12 4 3.5 19.5h17L12 4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M12 9.5v4.2M12 16.6v.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24">
+    <path d="M4 19.5V13m5 6.5V8m5 11.5v-8m5 8V5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.9l1.9 1.1M17.2 15l1.9 1.1M4.9 16.1l1.9-1.1M17.2 9l1.9-1.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-file" viewBox="0 0 24 24">
+    <path d="M6.5 3.5h7L18 8v12.5H6.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M13.2 3.7V8H18" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  </symbol>
+
+
+</svg>
+
+<header class="app-header">
+  <div class="app-header__bar">
     <div class="brand">
-      <span class="brand__mark" aria-hidden="true">SLT</span>
+      <span class="brand__mark"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-shield"></use></svg></span>
       <div class="brand__text">
         <h1 class="brand__name">Security Log Triage Lab</h1>
         <p class="brand__subtitle">Windows Security Event Log Triage Tool</p>
       </div>
     </div>
-    <div class="header-badges">
-      <span class="badge badge--calm">Educational</span>
-      <span class="badge badge--calm">100% offline</span>
+    <div class="header-pills">
+      <span class="pill pill--live"><span class="pill__dot" aria-hidden="true"></span>Local analysis</span>
+      <span class="pill"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>100% offline</span>
+      <button type="button" class="pill pill--button" id="btn-privacy-jump">Privacy &amp; limits</button>
     </div>
   </div>
+
+  <nav class="tabs" role="tablist" aria-label="Application sections">
+    <button type="button" class="tab is-active" role="tab" id="tab-dashboard"
+            aria-selected="true" aria-controls="panel-dashboard" tabindex="0">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-grid"></use></svg>Dashboard
+    </button>
+    <button type="button" class="tab" role="tab" id="tab-events"
+            aria-selected="false" aria-controls="panel-events" tabindex="-1">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Events
+    </button>
+    <button type="button" class="tab" role="tab" id="tab-learn"
+            aria-selected="false" aria-controls="panel-learn" tabindex="-1">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Learn
+    </button>
+    <button type="button" class="tab" role="tab" id="tab-export"
+            aria-selected="false" aria-controls="panel-export" tabindex="-1">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export data
+    </button>
+    <button type="button" class="tab" role="tab" id="tab-privacy"
+            aria-selected="false" aria-controls="panel-privacy" tabindex="-1">
+      <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy &amp; limits
+    </button>
+  </nav>
 </header>
 
-<!-- =====================================================================
-     Privacy notice (required, deliberately prominent)
-     ===================================================================== -->
-<section class="privacy-banner" aria-labelledby="privacy-heading">
-  <div class="wrap privacy-banner__inner">
-    <span class="privacy-banner__icon" aria-hidden="true">&#128274;</span>
-    <div>
-      <h2 class="privacy-banner__heading" id="privacy-heading">Privacy: your data never leaves this browser</h2>
-      <p class="privacy-banner__text">
-        <strong>Your Windows security logs are analysed locally in your browser. Files are not uploaded or transmitted anywhere.</strong>
+<div class="privacy-strip">
+  <div class="privacy-strip__inner">
+    <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
+    <p class="privacy-strip__text">
+      <strong>Your Windows security logs are analysed locally in your browser and are not uploaded anywhere.</strong>
+    </p>
+    <details class="privacy-strip__details">
+      <summary>What that means</summary>
+      <p>
+        Your Windows security logs are analysed locally in your browser. Files are not uploaded or
+        transmitted anywhere. There is no server, no analytics, no tracking, no cookies and no external
+        API in this tool. Your event logs are held in memory only and disappear when you close or
+        refresh the tab.
       </p>
-      <p class="privacy-banner__note">
-        There is no server, no analytics, no tracking, no cookies and no external API in this tool.
-        Your event logs are held in memory only and disappear when you close or refresh the tab.
-      </p>
-    </div>
+    </details>
   </div>
-</section>
+</div>
 
-<main id="main" class="wrap main">
+<main id="main" class="app-main">
 
-  <!-- ===================================================================
-       Disclaimer (required)
-       =================================================================== -->
-  <section class="notice notice--disclaimer" aria-labelledby="disclaimer-heading">
-    <h2 class="notice__heading" id="disclaimer-heading">Disclaimer</h2>
-    <p>
-      <strong>Educational SOC triage tool. Findings indicate activity that may deserve investigation and do not prove malicious behaviour.</strong>
-    </p>
-    <p>Only analyse logs from systems you own or are authorised to investigate.</p>
-  </section>
+  <noscript>
+    <div class="alert" style="margin-bottom:1rem">
+      <p class="error-box__title">JavaScript is required</p>
+      <p>This tool analyses your log inside the browser, so it needs JavaScript enabled. Nothing is
+      uploaded either way: with JavaScript disabled, no file is read at all.</p>
+    </div>
+  </noscript>
 
-  <!-- ===================================================================
-       1. How to get the data out of Windows
-       =================================================================== -->
-  <section class="panel" aria-labelledby="howto-heading">
-    <h2 class="panel__heading" id="howto-heading">
-      <span aria-hidden="true">&#128196;</span> Step 1 &mdash; Export your Windows Security events
-    </h2>
-    <p class="panel__lede">
-      This tool reads <strong>CSV or delimited text exports</strong> of Windows event logs.
-      It does <strong>not</strong> read raw <code>.evtx</code> files in this version.
-    </p>
+  <section class="tab-panel" role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard" tabindex="0">
 
-    <details class="howto" open>
-      <summary class="howto__summary">Option A &mdash; Windows Event Viewer (point and click)</summary>
-      <ol class="howto__steps">
-        <li>Open <strong>Event Viewer</strong> (press <kbd>Win</kbd> + <kbd>R</kbd>, type <code>eventvwr.msc</code>, press Enter).</li>
-        <li>In the left pane expand <strong>Windows Logs</strong>, then click <strong>Security</strong>.</li>
-        <li>Optional: use <strong>Filter Current Log&hellip;</strong> on the right to narrow the events, for example Event IDs <code>4624,4625,4720,4726,4728,4732,1102</code>.</li>
-        <li>On the right, click <strong>Save All Events As&hellip;</strong> (or <strong>Save Filtered Log File As&hellip;</strong>).</li>
-        <li>Choose <strong>Comma Separated Values (*.csv)</strong> if your build offers it. If it only offers <strong>Text (Tab delimited) (*.txt)</strong>, that is fine &mdash; this tool auto-detects tab-separated files too.</li>
-        <li>Upload the saved file below. Do not open and re-save it in Excel first: Excel can damage the quoting and reformat the timestamps.</li>
-      </ol>
-      <p class="howto__hint">
-        Honest note: not every Windows 10/11 build shows a CSV option in that dialog. If yours does
-        not, use Option B, which always works.
-      </p>
-    </details>
-
-    <details class="howto">
-      <summary class="howto__summary">Option B &mdash; PowerShell (most reliable, recommended)</summary>
-      <p class="howto__hint">
-        Run an <strong>elevated</strong> PowerShell (right-click &rarr; <em>Run as Administrator</em>), because
-        reading the Security log requires administrator rights.
-      </p>
-      <pre class="code-block" tabindex="0" role="region" aria-label="PowerShell command to export Windows Security events to CSV"><code># Export selected Windows Security events to CSV for triage practice.
-# Run in an ELEVATED PowerShell window. Change the output path if you like.
-$ids = 4624,4625,4720,4726,4728,4732,1102,4688
-Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
-  Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, TaskDisplayName,
-                KeywordsDisplayNames, Message |
-  Export-Csv -Path "$env:USERPROFILE\Desktop\security-triage.csv" -NoTypeInformation -Encoding UTF8</code></pre>
-      <p class="howto__hint">
-        Tip: add <code>; StartTime=(Get-Date).AddDays(-1)</code> inside the filter hashtable to export
-        only the last day, and keep test exports small while you are learning.
-      </p>
-    </details>
-
-    <details class="howto">
-      <summary class="howto__summary">Option C &mdash; No Windows machine? Use the demo data</summary>
-      <p class="howto__hint">
-        The demo buttons under the upload box load fictional sample logs written for teaching. They are
-        clearly labelled <strong>Demo Data</strong> and are safe to use in presentations and practice.
-      </p>
-    </details>
-  </section>
-
-  <!-- ===================================================================
-       2. Upload
-       =================================================================== -->
-  <section class="panel" aria-labelledby="upload-heading">
-    <h2 class="panel__heading" id="upload-heading">
-      <span aria-hidden="true">&#128193;</span> Step 2 &mdash; Upload your exported event log
-    </h2>
-    <p class="panel__lede">
-      Your Windows event logs are analysed locally in your browser and are not uploaded anywhere.
-    </p>
-
-    <div class="upload">
-      <div class="drop-zone" id="drop-zone">
-        <input type="file" id="file-input" class="sr-only"
-               accept=".csv,.txt,.tsv,.log,text/csv,text/plain">
-        <label for="file-input" class="drop-zone__label">
-          <span class="drop-zone__icon" aria-hidden="true">&#8682;</span>
-          <span class="drop-zone__title">Choose a CSV file, or drag and drop it here</span>
-          <span class="drop-zone__hint">
-            Comma, semicolon or tab separated &middot; .csv / .txt / .tsv &middot; up to 25 MB
-          </span>
-          <span class="btn btn--primary">Browse for a file&hellip;</span>
-        </label>
-      </div>
-
-      <p class="upload__privacy">
-        <span aria-hidden="true">&#128274;</span>
-        Files are read by your own browser. They are never uploaded, transmitted or saved anywhere.
+    <div class="empty-workspace" id="workspace-empty">
+      <div class="empty-workspace__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></div>
+      <h2 class="empty-workspace__title">No log loaded yet</h2>
+      <p class="empty-workspace__text">
+        Upload a Windows event export, or load one of the four fictional demo datasets to see a complete
+        triage report. Everything is analysed on this device and nothing is sent anywhere.
       </p>
     </div>
 
-    <!-- Loaded-file metadata -->
-    <div class="upload__meta" id="file-meta" hidden>
-      <dl class="meta-grid">
-        <div><dt>File</dt><dd id="meta-filename">&mdash;</dd></div>
-        <div><dt>Size</dt><dd id="meta-filesize">&mdash;</dd></div>
-        <div><dt>Detected format</dt><dd id="meta-delimiter">&mdash;</dd></div>
-        <div><dt>Encoding</dt><dd id="meta-encoding">&mdash;</dd></div>
-      </dl>
-      <button type="button" class="btn btn--ghost" id="btn-reset">Clear loaded data</button>
-    </div>
-
-    <!-- Live status: polite, so a screen reader is not interrupted mid-sentence -->
-    <p class="status" id="status-region" role="status" aria-live="polite">No file loaded yet.</p>
-
-    <!-- Hard errors: assertive, because the user has to act on them -->
-    <div class="error-box" id="error-region" role="alert" hidden></div>
-
-    <div class="demo-bar" aria-labelledby="demo-heading">
-      <div class="demo-bar__head">
-        <h3 class="demo-bar__heading" id="demo-heading">Test mode</h3>
+    <section class="card upload-card" aria-labelledby="upload-heading">
+      <div class="card__head">
+        <h2 class="card__title" id="upload-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg>
+          Analyse a log file
+        </h2>
         <span class="badge badge--demo" id="demo-chip" hidden>Demo Data</span>
       </div>
-      <p class="demo-bar__note">
-        Fictional teaching data &mdash; invented users, computers and private (RFC 1918) or
-        documentation (RFC 5737) IP addresses only.
-      </p>
-      <div class="demo-bar__buttons" role="group" aria-label="Load demo datasets">
-        <button type="button" class="btn btn--ghost" id="btn-sample-normal" disabled>Load Normal Sample</button>
-        <button type="button" class="btn btn--ghost" id="btn-sample-guessing" disabled>Load Password Guessing Sample</button>
-        <button type="button" class="btn btn--ghost" id="btn-sample-privilege" disabled>Load Privilege Escalation Sample</button>
-        <button type="button" class="btn btn--ghost" id="btn-sample-mixed" disabled>Load Mixed SOC Sample</button>
+
+      <div class="upload-grid">
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" class="sr-only" accept=".csv,.txt,.tsv,.log,text/csv,text/plain">
+          <label for="file-input" class="drop-zone__label">
+            <span class="drop-zone__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-upload"></use></svg></span>
+            <span class="drop-zone__title">Drop a CSV export here</span>
+            <span class="drop-zone__hint">or choose a file &middot; .csv / .txt / .tsv &middot; up to 25 MB</span>
+            <span class="btn btn--primary">Browse files</span>
+            <span class="drop-zone__privacy">Comma, semicolon or tab separated. Read locally, never uploaded.</span>
+          </label>
+        </div>
+
+        <div class="demo-panel">
+          <h3 class="demo-panel__title">Demo datasets</h3>
+          <p class="demo-panel__note">Fictional teaching data &mdash; invented users, computers and reserved IP addresses only.</p>
+          <div class="demo-grid" role="group" aria-label="Load demo datasets">
+            <button type="button" class="btn btn--demo" id="btn-sample-normal" disabled>
+              <span class="btn__label">Load Normal Sample</span>
+              <span class="btn__meta">Quiet day &middot; 15 events</span>
+            </button>
+            <button type="button" class="btn btn--demo" id="btn-sample-guessing" disabled>
+              <span class="btn__label">Load Password Guessing Sample</span>
+              <span class="btn__meta">8 failures, then a success</span>
+            </button>
+            <button type="button" class="btn btn--demo" id="btn-sample-privilege" disabled>
+              <span class="btn__label">Load Privilege Escalation Sample</span>
+              <span class="btn__meta">New admin account</span>
+            </button>
+            <button type="button" class="btn btn--demo" id="btn-sample-mixed" disabled>
+              <span class="btn__label">Load Mixed SOC Sample</span>
+              <span class="btn__meta">Full investigation</span>
+            </button>
+          </div>
+          <p class="demo-panel__hint" id="demo-hint">
+            These four datasets load instantly and work offline. Loading one changes nothing on your computer.
+          </p>
+        </div>
       </div>
+
       <div class="demo-info" id="demo-info" hidden></div>
-      <p class="demo-bar__hint" id="demo-hint">
-        These four datasets load instantly and work offline. Loading one changes nothing on your computer.
-      </p>
-    </div>
-  </section>
 
-  <!-- ===================================================================
-       Parse check
-       =================================================================== -->
-  <section class="panel" id="parse-panel" hidden aria-labelledby="parse-heading">
-    <h2 class="panel__heading" id="parse-heading">
-      <span aria-hidden="true">&#9989;</span> Parse check
-    </h2>
-    <p class="panel__lede">
-      What the tool understood from your file, before any analysis happens.
-    </p>
-
-    <div class="grid grid--stats">
-      <div class="stat stat--accent"><span class="stat__value" id="stat-events">0</span><span class="stat__label">Events parsed</span></div>
-      <div class="stat"><span class="stat__value" id="stat-rows">0</span><span class="stat__label">Data rows read</span></div>
-      <div class="stat"><span class="stat__value" id="stat-skipped">0</span><span class="stat__label">Rows skipped</span></div>
-      <div class="stat"><span class="stat__value" id="stat-columns">0</span><span class="stat__label">Columns recognised</span></div>
-      <div class="stat"><span class="stat__value" id="stat-missing">0</span><span class="stat__label">Fields not found</span></div>
-      <div class="stat"><span class="stat__value" id="stat-range">&mdash;</span><span class="stat__label">Time range</span></div>
-    </div>
-
-    <div class="grid grid--2">
-      <div class="card">
-        <h3 class="card__heading">Columns understood</h3>
-        <ul class="col-list" id="detected-columns"></ul>
+      <div class="file-meta" id="file-meta" hidden>
+        <dl class="file-meta__grid">
+          <div><dt>File</dt><dd id="meta-filename">&mdash;</dd></div>
+          <div><dt>Size</dt><dd id="meta-filesize">&mdash;</dd></div>
+          <div><dt>Format</dt><dd id="meta-delimiter">&mdash;</dd></div>
+          <div><dt>Encoding</dt><dd id="meta-encoding">&mdash;</dd></div>
+        </dl>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-reset">Clear loaded data</button>
       </div>
-      <div class="card">
-        <h3 class="card__heading">Columns not found</h3>
-        <ul class="col-list col-list--missing" id="missing-columns"></ul>
-        <p class="card__note" id="missing-note" hidden></p>
-      </div>
-    </div>
 
-    <div class="card recognition">
-      <h3 class="card__heading">Event IDs recognised</h3>
-      <p class="card__note">
-        These are the Windows events this version can explain. The priority shown is the
-        attention an event of that type deserves <strong>on its own</strong>, before any
-        correlation with the events around it.
+      <p class="status" id="status-region" role="status" aria-live="polite">No file loaded yet.</p>
+
+      <div class="alert" id="error-region" role="alert" hidden></div>
+    </section>
+
+    <section class="panel" id="dashboard-panel" hidden aria-labelledby="dashboard-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="dashboard-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"></use></svg>Overview
+        </h2>
+        <p class="section-head__meta" id="dash-scope"></p>
+      </div>
+
+      <div class="stat-grid">
+        <article class="stat-card stat-card--accent">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg></span>
+          <span class="stat-card__value" id="dash-total">0</span>
+          <span class="stat-card__label">Total events</span>
+        </article>
+        <article class="stat-card stat-card--ok">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg></span>
+          <span class="stat-card__value" id="dash-success">0</span>
+          <span class="stat-card__label">Successful logons</span>
+        </article>
+        <article class="stat-card stat-card--warn">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></span>
+          <span class="stat-card__value" id="dash-failed">0</span>
+          <span class="stat-card__label">Failed logons</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-userplus"></use></svg></span>
+          <span class="stat-card__value" id="dash-created">0</span>
+          <span class="stat-card__label">Accounts created</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg></span>
+          <span class="stat-card__value" id="dash-priv">0</span>
+          <span class="stat-card__label">Privilege changes</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash"></use></svg></span>
+          <span class="stat-card__value" id="dash-cleared">0</span>
+          <span class="stat-card__label">Audit log cleared</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></span>
+          <span class="stat-card__value" id="dash-process">0</span>
+          <span class="stat-card__label">Process creation</span>
+        </article>
+        <article class="stat-card stat-card--alert">
+          <span class="stat-card__icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg></span>
+          <span class="stat-card__value" id="dash-investigate">0</span>
+          <span class="stat-card__label">Needs investigation</span>
+        </article>
+      </div>
+
+      <div class="dash-split">
+        <section class="card chart-card" aria-labelledby="activity-heading">
+          <div class="card__head">
+            <h3 class="card__title" id="activity-heading">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>Event activity over time
+            </h3>
+            <span class="card__meta" id="dash-activity-range"></span>
+          </div>
+          <div class="chart" id="dash-activity"></div>
+          <p class="card__note" id="dash-activity-note" hidden></p>
+        </section>
+
+        <section class="card" aria-labelledby="priority-heading">
+          <div class="card__head">
+            <h3 class="card__title" id="priority-heading">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Events by priority
+            </h3>
+          </div>
+          <ul class="bar-list" id="dash-severity"></ul>
+          <p class="card__note">Priority is investigative urgency, not certainty of compromise.</p>
+        </section>
+      </div>
+
+      <div class="dash-triple">
+        <section class="card" aria-labelledby="top-accounts-heading">
+          <div class="card__head">
+            <h3 class="card__title" id="top-accounts-heading">Top accounts</h3>
+          </div>
+          <ul class="bar-list" id="dash-top-accounts"></ul>
+        </section>
+        <section class="card" aria-labelledby="top-failures-heading">
+          <div class="card__head">
+            <h3 class="card__title" id="top-failures-heading">Most failed logons</h3>
+          </div>
+          <ul class="bar-list" id="dash-top-failures"></ul>
+        </section>
+        <section class="card" aria-labelledby="top-ids-heading">
+          <div class="card__head">
+            <h3 class="card__title" id="top-ids-heading">Most common Event IDs</h3>
+          </div>
+          <ul class="bar-list" id="dash-top-ids"></ul>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="timeline-heading">
+        <div class="card__head">
+          <h3 class="card__title" id="timeline-heading">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-timeline"></use></svg>Timeline of noteworthy activity
+          </h3>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table data-table--compact">
+            <caption class="sr-only">Noteworthy events in chronological order</caption>
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Event ID</th>
+                <th scope="col">What it means</th>
+                <th scope="col">Account</th>
+                <th scope="col">Why it is here</th>
+              </tr>
+            </thead>
+            <tbody id="dash-timeline-body"></tbody>
+          </table>
+        </div>
+        <p class="card__note" id="dash-timeline-note" hidden></p>
+      </section>
+
+    </section>
+
+    <section class="panel" id="findings-panel" hidden aria-labelledby="findings-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="findings-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>Triage findings
+        </h2>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-open-events">Open event explorer</button>
+      </div>
+      <p class="section-head__meta" id="findings-summary"></p>
+
+      <div class="findings-list" id="findings-list"></div>
+
+      <div class="notice" id="analysis-notes" hidden aria-labelledby="analysis-notes-heading">
+        <h3 class="notice__heading" id="analysis-notes-heading">Notes about this analysis</h3>
+        <ul id="analysis-notes-list"></ul>
+      </div>
+
+      <p class="disclaimer-line">
+        Findings indicate activity that may deserve investigation and do not prove malicious behaviour.
       </p>
+    </section>
+
+    <section class="panel" id="admin-panel" hidden aria-labelledby="admin-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="admin-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-key"></use></svg>Administrative / Privilege Activity
+        </h2>
+      </div>
+      <p class="section-head__meta" id="admin-summary"></p>
+      <p class="card__note" id="admin-explanation"></p>
+
       <div class="table-scroll">
         <table class="data-table data-table--compact">
-          <caption class="sr-only">Windows Event IDs found in the loaded file, with their meaning and count</caption>
-          <thead>
-            <tr>
-              <th scope="col">Event ID</th>
-              <th scope="col">What it means</th>
-              <th scope="col">Category</th>
-              <th scope="col">Count</th>
-              <th scope="col">Priority on its own</th>
-            </tr>
-          </thead>
-          <tbody id="recognition-body"></tbody>
-        </table>
-      </div>
-      <p class="card__note" id="unrecognised-note" hidden></p>
-    </div>
-
-    <div class="notice notice--warn" id="warning-region" hidden aria-labelledby="warning-heading">
-      <h3 class="notice__heading" id="warning-heading">Notes about this file</h3>
-      <ul id="warning-list"></ul>
-    </div>
-
-    <details class="howto" open>
-      <summary class="howto__summary">Preview: the first rows as the tool understood them</summary>
-      <div class="table-scroll">
-        <table class="data-table">
-          <caption>First rows parsed from the loaded file</caption>
-          <thead>
-            <tr>
-              <th scope="col">Line</th>
-              <th scope="col">Date / Time</th>
-              <th scope="col">Event ID</th>
-              <th scope="col">Level</th>
-              <th scope="col">Account</th>
-              <th scope="col">Computer</th>
-              <th scope="col">Message (shortened)</th>
-            </tr>
-          </thead>
-          <tbody id="preview-body"></tbody>
-        </table>
-      </div>
-      <p class="howto__hint">
-        If something looks wrong here, the problem is usually the export rather than the analysis.
-      </p>
-    </details>
-  </section>
-
-  <!-- ===================================================================
-       Dashboard
-       =================================================================== -->
-  <section class="panel" id="dashboard-panel" hidden aria-labelledby="dashboard-heading">
-    <h2 class="panel__heading" id="dashboard-heading">
-      <span aria-hidden="true">&#128202;</span> Dashboard
-    </h2>
-    <p class="panel__lede">
-      What this file contains, at a glance. The counts describe the data; the priority tiles describe
-      how much attention the analysis suggests, not how likely anything is.
-    </p>
-
-    <div class="grid grid--stats">
-      <div class="stat stat--accent"><span class="stat__value" id="dash-total">0</span><span class="stat__label">Total events</span></div>
-      <div class="stat"><span class="stat__value" id="dash-success">0</span><span class="stat__label">Successful logons</span></div>
-      <div class="stat"><span class="stat__value" id="dash-failed">0</span><span class="stat__label">Failed logons</span></div>
-      <div class="stat"><span class="stat__value" id="dash-created">0</span><span class="stat__label">Accounts created</span></div>
-      <div class="stat"><span class="stat__value" id="dash-priv">0</span><span class="stat__label">Privilege changes</span></div>
-      <div class="stat"><span class="stat__value" id="dash-cleared">0</span><span class="stat__label">Audit log cleared</span></div>
-      <div class="stat"><span class="stat__value" id="dash-process">0</span><span class="stat__label">Process creation</span></div>
-      <div class="stat stat--high"><span class="stat__value" id="dash-investigate">0</span><span class="stat__label">Events requiring investigation</span></div>
-    </div>
-
-    <div class="grid grid--2">
-      <div class="card">
-        <h3 class="card__heading">Top accounts by event count</h3>
-        <ul class="bar-list" id="dash-top-accounts"></ul>
-      </div>
-      <div class="card">
-        <h3 class="card__heading">Accounts with the most failed logons</h3>
-        <ul class="bar-list" id="dash-top-failures"></ul>
-      </div>
-    </div>
-
-    <div class="grid grid--2">
-      <div class="card">
-        <h3 class="card__heading">Most common Event IDs</h3>
-        <ul class="bar-list" id="dash-top-ids"></ul>
-      </div>
-      <div class="card">
-        <h3 class="card__heading">Events by priority</h3>
-        <ul class="bar-list" id="dash-severity"></ul>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3 class="card__heading">Timeline of noteworthy activity</h3>
-      <div class="table-scroll">
-        <table class="data-table data-table--compact">
-          <caption class="sr-only">Noteworthy events in chronological order</caption>
+          <caption class="sr-only">Account, group, service and audit-log changes in this file</caption>
           <thead>
             <tr>
               <th scope="col">Time</th>
               <th scope="col">Event ID</th>
               <th scope="col">What it means</th>
               <th scope="col">Account</th>
-              <th scope="col">Why it is here</th>
+              <th scope="col">Performed by</th>
+              <th scope="col">Detail</th>
+              <th scope="col">Line</th>
             </tr>
           </thead>
-          <tbody id="dash-timeline-body"></tbody>
+          <tbody id="admin-body"></tbody>
         </table>
       </div>
-      <p class="card__note" id="dash-timeline-note" hidden></p>
-    </div>
+    </section>
+
+    <details class="details-card" id="details-card">
+      <summary class="details-card__summary">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file"></use></svg>
+        File details and parse check
+        <span class="details-card__hint">columns understood, warnings, Event IDs recognised and a preview</span>
+      </summary>
+
+      <section class="panel panel--flush" id="parse-panel" hidden aria-labelledby="parse-heading">
+        <h2 class="sr-only" id="parse-heading">Parse check</h2>
+
+        <div class="stat-grid stat-grid--mini">
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-events">0</span><span class="mini-stat__label">Events parsed</span></div>
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-rows">0</span><span class="mini-stat__label">Rows read</span></div>
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-skipped">0</span><span class="mini-stat__label">Rows skipped</span></div>
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-columns">0</span><span class="mini-stat__label">Columns recognised</span></div>
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-missing">0</span><span class="mini-stat__label">Fields not found</span></div>
+          <div class="mini-stat"><span class="mini-stat__value" id="stat-range">&mdash;</span><span class="mini-stat__label">Time range</span></div>
+        </div>
+
+        <div class="dash-split">
+          <div class="card">
+            <h3 class="card__title">Columns understood</h3>
+            <ul class="col-list" id="detected-columns"></ul>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Columns not found</h3>
+            <ul class="col-list col-list--missing" id="missing-columns"></ul>
+            <p class="card__note" id="missing-note" hidden></p>
+          </div>
+        </div>
+
+        <div class="notice" id="warning-region" hidden aria-labelledby="warning-heading">
+          <h3 class="notice__heading" id="warning-heading">Notes about this file</h3>
+          <ul id="warning-list"></ul>
+        </div>
+
+        <div class="card recognition">
+          <h3 class="card__title">Event IDs recognised</h3>
+          <p class="card__note">
+            The priority shown is what an event of that type deserves <strong>on its own</strong>, before
+            any correlation with the events around it.
+          </p>
+          <div class="table-scroll">
+            <table class="data-table data-table--compact">
+              <caption class="sr-only">Windows Event IDs found, with their meaning and count</caption>
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">Meaning</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Count</th>
+                  <th scope="col">Priority</th>
+                </tr>
+              </thead>
+              <tbody id="recognition-body"></tbody>
+            </table>
+          </div>
+          <p class="card__note" id="unrecognised-note" hidden></p>
+        </div>
+
+        <div class="card">
+          <h3 class="card__title">Preview of the first rows</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <caption class="sr-only">First rows parsed from the loaded file</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Line</th>
+                  <th scope="col">Date / Time</th>
+                  <th scope="col">Event ID</th>
+                  <th scope="col">Level</th>
+                  <th scope="col">Account</th>
+                  <th scope="col">Computer</th>
+                  <th scope="col">Message (shortened)</th>
+                </tr>
+              </thead>
+              <tbody id="preview-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </details>
+
+    <section class="panel" id="settings-panel" hidden aria-labelledby="settings-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="settings-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>Analysis settings
+        </h2>
+      </div>
+      <p class="section-head__meta">
+        Security thresholds vary by environment. These values are educational defaults rather than
+        universal SOC detection rules.
+      </p>
+
+      <div class="settings-grid">
+        <div class="field">
+          <label for="setting-threshold">Failed logon threshold <span class="field__default">default 5</span></label>
+          <input type="number" id="setting-threshold" min="2" max="1000" step="1" value="5" inputmode="numeric">
+          <p class="field__hint">How many failed sign-ins for one account count as &ldquo;repeated&rdquo;.</p>
+        </div>
+
+        <div class="field">
+          <label for="setting-window">Failed logon time window <span class="field__default">default 10 min</span></label>
+          <input type="number" id="setting-window" min="1" max="1440" step="1" value="10" inputmode="numeric">
+          <p class="field__hint">How close together the failures must be for a burst.</p>
+        </div>
+      </div>
+
+      <div class="field field--checkbox">
+        <input type="checkbox" id="setting-use-window" checked>
+        <label for="setting-use-window">Apply the time window when timestamps are reliable</label>
+      </div>
+      <p class="field__hint field__hint--indent" id="window-status"></p>
+
+      <div class="settings-actions">
+        <button type="button" class="btn btn--primary" id="btn-apply-settings">Apply settings</button>
+        <button type="button" class="btn btn--ghost" id="btn-reset-settings">Reset Defaults</button>
+      </div>
+
+      <p class="card__note">
+        Changing these values re-runs the analysis on the data already in your browser. Nothing is
+        re-uploaded, and these settings are forgotten when you close or refresh the tab.
+      </p>
+    </section>
   </section>
 
   <!-- ===================================================================
-       Findings
+       TAB: Events
        =================================================================== -->
-  <section class="panel" id="findings-panel" hidden aria-labelledby="findings-heading">
-    <h2 class="panel__heading" id="findings-heading">
-      <span aria-hidden="true">&#128269;</span> Triage findings
-    </h2>
-    <p class="panel__lede" id="findings-summary"></p>
+  <section class="tab-panel" role="tabpanel" id="panel-events" aria-labelledby="tab-events" tabindex="0" hidden>
 
-    <div id="findings-list"></div>
-
-    <div class="notice notice--warn" id="analysis-notes" hidden aria-labelledby="analysis-notes-heading">
-      <h3 class="notice__heading" id="analysis-notes-heading">Notes about this analysis</h3>
-      <ul id="analysis-notes-list"></ul>
+    <div class="empty-workspace" id="events-empty">
+      <div class="empty-workspace__icon"><svg class="icon icon--xl" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg></div>
+      <h2 class="empty-workspace__title">No events to explore yet</h2>
+      <p class="empty-workspace__text">Load a CSV or a demo dataset on the Dashboard tab and the full event list will appear here.</p>
     </div>
 
-    <p class="panel__note">
-      Educational SOC triage tool. Findings indicate activity that may deserve investigation and do
-      not prove malicious behaviour. The investigation score is a way of putting findings in an
-      order &mdash; it is <strong>not</strong> a probability of compromise.
-    </p>
+    <section class="panel" id="explorer-panel" hidden aria-labelledby="explorer-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="explorer-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rows"></use></svg>Event explorer
+        </h2>
+        <span class="section-head__meta" id="filter-count" role="status" aria-live="polite"></span>
+      </div>
+      <p class="card__note">
+        Every event the tool read, so you can check the analysis for yourself. Filters only change what
+        is shown here &mdash; they never change the findings.
+      </p>
+
+      <div class="filters" role="search" aria-label="Filter the event list">
+        <div class="field">
+          <label for="filter-eventid">Event ID</label>
+          <select id="filter-eventid"><option value="">All Event IDs</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-account">Account</label>
+          <select id="filter-account"><option value="">All accounts</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-severity">Priority</label>
+          <select id="filter-severity">
+            <option value="">All priorities</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+            <option value="Informational">Informational</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-ip">Source IP</label>
+          <select id="filter-ip"><option value="">All source addresses</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-category">Event type</label>
+          <select id="filter-category"><option value="">All event types</option></select>
+        </div>
+        <div class="field field--search">
+          <label for="filter-search">Search</label>
+          <input type="search" id="filter-search" placeholder="account, computer or message text">
+        </div>
+        <div class="filters__actions">
+          <button type="button" class="btn btn--ghost btn--sm" id="btn-clear-filters">Clear filters</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="data-table data-table--events">
+          <caption class="sr-only">Events read from the file, after filtering</caption>
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Event</th>
+              <th scope="col">Meaning</th>
+              <th scope="col">Account</th>
+              <th scope="col">Computer</th>
+              <th scope="col">Source IP</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Message</th>
+            </tr>
+          </thead>
+          <tbody id="events-body"></tbody>
+        </table>
+      </div>
+      <p class="card__note" id="events-limit-note" hidden></p>
+    </section>
   </section>
 
   <!-- ===================================================================
-       Administrative / privilege activity (Rule 5 summary)
+       TAB: Learn
        =================================================================== -->
-  <section class="panel" id="admin-panel" hidden aria-labelledby="admin-heading">
-    <h2 class="panel__heading" id="admin-heading">
-      <span aria-hidden="true">&#128451;</span> Administrative / Privilege Activity
-    </h2>
-    <p class="panel__lede" id="admin-summary"></p>
-    <p class="card__note" id="admin-explanation"></p>
+  <section class="tab-panel" role="tabpanel" id="panel-learn" aria-labelledby="tab-learn" tabindex="0" hidden>
 
-    <div class="table-scroll">
-      <table class="data-table data-table--compact">
-        <caption class="sr-only">Account, group, service and audit-log changes in this file</caption>
-        <thead>
-          <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Event ID</th>
-            <th scope="col">What it means</th>
-            <th scope="col">Account involved</th>
-            <th scope="col">Performed by</th>
-            <th scope="col">Detail</th>
-            <th scope="col">File line</th>
-          </tr>
-        </thead>
-        <tbody id="admin-body"></tbody>
-      </table>
-    </div>
+    <section class="panel" aria-labelledby="soc-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="soc-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>How to think like a SOC analyst
+        </h2>
+      </div>
+      <p class="section-head__meta">
+        A Security Operations Centre watches an organisation's systems. <em>Triage</em> is the first
+        pass: deciding which alerts deserve a human's attention, and in what order.
+      </p>
+
+      <ol class="workflow">
+        <li><strong>Identify the event.</strong> What is it? Event ID 4625 means a logon attempt failed.</li>
+        <li><strong>Understand what happened.</strong> Which account, from where, at what time.</li>
+        <li><strong>Identify the affected user or system.</strong> An ordinary user, an administrator, a service account or a machine account?</li>
+        <li><strong>Decide whether the activity is expected.</strong> Is it normal for this account, this hour, this device? You often cannot know from the log alone, so say so rather than guessing.</li>
+        <li><strong>Look for related events.</strong> Was there a logoff, a new process or a privilege change around the same time?</li>
+        <li><strong>Correlate authentication and privilege activity.</strong> Failures followed by a success tell a different story than failures alone.</li>
+        <li><strong>Gather additional evidence.</strong> Endpoint logs, VPN records, badge access, ticket history, the user themselves.</li>
+        <li><strong>Decide whether escalation is required.</strong> Document what you saw, what you ruled out, and what remains open.</li>
+      </ol>
+
+      <div class="key-quote">
+        <p>"One security event rarely tells the entire story. Analysts build context by correlating multiple events."</p>
+        <p>"A detection is a reason to investigate, not proof that an attacker is present."</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="ref-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="ref-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-book"></use></svg>Event ID reference for beginners
+        </h2>
+      </div>
+      <p class="section-head__meta">
+        Windows has thousands of Event IDs. These are the ten worth knowing first for authentication,
+        account and privilege activity. None of them proves that anything bad has happened.
+      </p>
+
+      <div class="table-scroll">
+        <table class="ref-table">
+          <caption class="sr-only">Windows Event IDs supported by this tool, with plain-English explanations</caption>
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">What it records</th>
+              <th scope="col">Why an analyst cares</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="ref-id">4624</td>
+              <td>Successful logon</td>
+              <td>Context, not a warning. It matters when it follows a burst of failures, or happens on a machine or account that should not be logging in.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4625</td>
+              <td>Failed logon</td>
+              <td>One is routine. A pattern is interesting: a wrong password, a stale service credential, or somebody guessing.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4688</td>
+              <td>Process created</td>
+              <td>Shows what ran. Only recorded if process-creation auditing is switched on, so absence proves nothing.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4720</td>
+              <td>User account created</td>
+              <td>Normal for administrators. Worth verifying, because attackers also create accounts to keep access.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4726</td>
+              <td>User account deleted</td>
+              <td>Usually tidy administration; occasionally a sign of somebody covering their tracks.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4728</td>
+              <td>Member added to a global security group</td>
+              <td>Becomes important when the group is privileged, such as Domain Admins.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4732</td>
+              <td>Member added to a local security group</td>
+              <td>The same idea locally &mdash; for example adding an account to local Administrators.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">1102</td>
+              <td>Security audit log cleared</td>
+              <td>Can be legitimate maintenance, but it also removes evidence, so it is normally investigated.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">4104</td>
+              <td>PowerShell script block logging</td>
+              <td>Visibility into PowerShell commands, which is genuinely useful for both admins and attackers.</td>
+            </tr>
+            <tr>
+              <td class="ref-id">7045</td>
+              <td>Service installed</td>
+              <td>Often ordinary software installation; also a classic way to make malware start automatically.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </section>
 
   <!-- ===================================================================
-       Filters and event explorer
+       TAB: Export instructions
        =================================================================== -->
-  <section class="panel" id="explorer-panel" hidden aria-labelledby="explorer-heading">
-    <h2 class="panel__heading" id="explorer-heading">
-      <span aria-hidden="true">&#128269;</span> All events, with filters
-    </h2>
-    <p class="panel__lede">
-      Every event the tool read, so you can check the analysis for yourself. Filters only change what
-      is shown here &mdash; they never change the findings.
-    </p>
+  <section class="tab-panel" role="tabpanel" id="panel-export" aria-labelledby="tab-export" tabindex="0" hidden>
 
-    <div class="filters" role="search" aria-label="Filter the event list">
-      <div class="field">
-        <label for="filter-eventid">Event ID</label>
-        <select id="filter-eventid"><option value="">All Event IDs</option></select>
+    <section class="panel" aria-labelledby="export-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="export-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-export"></use></svg>Export Windows event data
+        </h2>
       </div>
-      <div class="field">
-        <label for="filter-account">Account</label>
-        <select id="filter-account"><option value="">All accounts</option></select>
-      </div>
-      <div class="field">
-        <label for="filter-severity">Priority</label>
-        <select id="filter-severity">
-          <option value="">All priorities</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-          <option value="Informational">Informational</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="filter-ip">Source IP</label>
-        <select id="filter-ip"><option value="">All source addresses</option></select>
-      </div>
-      <div class="field">
-        <label for="filter-category">Event type</label>
-        <select id="filter-category"><option value="">All event types</option></select>
-      </div>
-      <div class="field field--grow">
-        <label for="filter-search">Search</label>
-        <input type="search" id="filter-search" placeholder="account, computer or message text">
-      </div>
-      <div class="filters__actions">
-        <button type="button" class="btn btn--ghost" id="btn-clear-filters">Clear filters</button>
-      </div>
-    </div>
+      <p class="section-head__meta">
+        This tool reads CSV or delimited text. It does not read raw <code>.evtx</code> files in this version.
+      </p>
 
-    <p class="status" id="filter-count" role="status" aria-live="polite"></p>
+      <div class="steps">
+        <article class="step-card">
+          <span class="step-card__number">A</span>
+          <h3 class="step-card__title">Windows Event Viewer</h3>
+          <ol class="step-card__list">
+            <li>Open <strong>Event Viewer</strong> (<kbd>Win</kbd>+<kbd>R</kbd>, type <code>eventvwr.msc</code>).</li>
+            <li>Expand <strong>Windows Logs</strong> &rarr; <strong>Security</strong>.</li>
+            <li>Optional: <strong>Filter Current Log&hellip;</strong> for IDs <code>4624,4625,4720,4726,4728,4732,1102,4688</code>.</li>
+            <li>Right-click the log &rarr; <strong>Save All Events As&hellip;</strong>.</li>
+            <li>Choose <strong>Comma Separated Values (*.csv)</strong> if your build offers it.</li>
+          </ol>
+          <p class="step-card__note">
+            Not every Windows 10/11 build offers CSV in that dialog. A tab-delimited <code>.txt</code>
+            export works too &mdash; the tool detects tabs automatically. If neither is offered, use option B.
+          </p>
+        </article>
 
-    <div class="table-scroll">
-      <table class="data-table">
-        <caption>Events read from the file, after filtering</caption>
-        <thead>
-          <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Event ID</th>
-            <th scope="col">What it means</th>
-            <th scope="col">Account</th>
-            <th scope="col">Computer</th>
-            <th scope="col">Source IP</th>
-            <th scope="col">Priority</th>
-            <th scope="col">Message (shortened)</th>
-          </tr>
-        </thead>
-        <tbody id="events-body"></tbody>
-      </table>
-    </div>
-    <p class="card__note" id="events-limit-note" hidden></p>
+        <article class="step-card">
+          <span class="step-card__number">B</span>
+          <h3 class="step-card__title">PowerShell (always works)</h3>
+          <p class="step-card__note">Run PowerShell as Administrator &mdash; reading the Security log requires it.</p>
+          <pre class="code-block" tabindex="0" role="region" aria-label="PowerShell command to export Windows Security events to CSV"><code>$ids = 4624,4625,4720,4726,4728,4732,1102,4688
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
+  Select-Object TimeCreated, Id, LevelDisplayName, ProviderName,
+                TaskDisplayName, KeywordsDisplayNames, Message |
+  Export-Csv -Path "$env:USERPROFILE\Desktop\security-triage.csv" `
+             -NoTypeInformation -Encoding UTF8</code></pre>
+          <p class="step-card__note">
+            Add <code>; StartTime=(Get-Date).AddDays(-1)</code> inside the filter to export only the
+            last day. Event 7045 (services) lives in the System log, so export that separately.
+          </p>
+        </article>
+
+        <article class="step-card">
+          <span class="step-card__number">C</span>
+          <h3 class="step-card__title">Then upload it</h3>
+          <p class="step-card__note">
+            Go to <strong>Dashboard</strong> and drop the file on the upload area. Do not open and
+            re-save it in Excel first: Excel rewrites quoting and dates and can break the file.
+          </p>
+          <button type="button" class="btn btn--ghost btn--sm" id="btn-goto-dashboard">Back to the dashboard</button>
+        </article>
+      </div>
+    </section>
   </section>
 
   <!-- ===================================================================
-       Settings
+       TAB: Privacy and limits
        =================================================================== -->
-  <section class="panel" id="settings-panel" hidden aria-labelledby="settings-heading">
-    <h2 class="panel__heading" id="settings-heading">
-      <span aria-hidden="true">&#9881;</span> Analysis settings
-    </h2>
-    <p class="panel__lede">
-      Security thresholds vary by environment. These values are educational defaults rather than
-      universal SOC detection rules.
-    </p>
+  <section class="tab-panel" role="tabpanel" id="panel-privacy" aria-labelledby="tab-privacy" tabindex="0" hidden>
 
-    <div class="settings-grid">
-      <div class="field">
-        <label for="setting-threshold">Failed logon threshold</label>
-        <input type="number" id="setting-threshold" min="2" max="1000" step="1" value="5" inputmode="numeric">
-        <p class="field__hint">
-          How many failed sign-ins for one account count as &ldquo;repeated&rdquo;. Default 5.
+    <section class="panel" aria-labelledby="privacy-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="privacy-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>Privacy
+        </h2>
+      </div>
+      <p class="section-head__meta">
+        <strong>Your Windows security logs are analysed locally in your browser. Files are not uploaded
+        or transmitted anywhere.</strong>
+      </p>
+
+      <div class="privacy-grid">
+        <div class="privacy-item">
+          <h3 class="privacy-item__title">No upload</h3>
+          <p>The only file API used is <code>FileReader</code>, which hands the bytes to the page. There is no upload endpoint, because there is no server.</p>
+        </div>
+        <div class="privacy-item">
+          <h3 class="privacy-item__title">No network calls</h3>
+          <p>No <code>fetch</code>, <code>XMLHttpRequest</code>, <code>WebSocket</code> or beacon anywhere in the code. An automated test fails the build if one appears.</p>
+        </div>
+        <div class="privacy-item">
+          <h3 class="privacy-item__title">No storage</h3>
+          <p>Nothing is written to <code>localStorage</code>, cookies or IndexedDB. Close the tab and the log data, and your settings, are gone.</p>
+        </div>
+        <div class="privacy-item">
+          <h3 class="privacy-item__title">No telemetry</h3>
+          <p>No analytics, tracking, advertising or error reporting. The page loads three local files and nothing else.</p>
+        </div>
+      </div>
+
+      <div class="notice notice--warn">
+        <h3 class="notice__heading">Disclaimer</h3>
+        <p>
+          <strong>Educational SOC triage tool. Findings indicate activity that may deserve investigation
+          and do not prove malicious behaviour.</strong>
         </p>
+        <p>Only analyse logs from systems you own or are authorised to investigate.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="limits-heading">
+      <div class="section-head">
+        <h2 class="section-head__title" id="limits-heading">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-alert"></use></svg>What this tool cannot do
+        </h2>
+      </div>
+      <p class="section-head__meta">Knowing the limits of a tool is part of being a good analyst.</p>
+
+      <div class="limits-grid">
+        <div class="limit-item"><strong>An event is not proof.</strong> Every finding is a reason to look further, never a verdict.</div>
+        <div class="limit-item"><strong>Absence of evidence is not evidence of absence.</strong> If auditing was switched off, those events do not exist in the export.</div>
+        <div class="limit-item"><strong>CSV exports differ between machines.</strong> Column names, date formats and encodings vary with Windows version and regional settings.</div>
+        <div class="limit-item"><strong>Not every event carries a source IP.</strong> Local and console logons legitimately have none.</div>
+        <div class="limit-item"><strong>No baselining.</strong> The tool cannot know whether a login is normal <em>for you</em>; only a human with context can decide that.</div>
+        <div class="limit-item"><strong>No cross-system correlation.</strong> It sees only the file you give it.</div>
+        <div class="limit-item"><strong>Timestamps can be ambiguous.</strong> Where day/month order is unclear, the tool says so and disables time-window rules rather than guessing.</div>
+        <div class="limit-item"><strong>Not an EDR, SIEM or SOC platform.</strong> It is a teaching aid for reading one export carefully.</div>
       </div>
 
-      <div class="field">
-        <label for="setting-window">Failed logon time window (minutes)</label>
-        <input type="number" id="setting-window" min="1" max="1440" step="1" value="10" inputmode="numeric">
-        <p class="field__hint">
-          How close together the failures must be for a burst. Default 10 minutes.
-        </p>
-      </div>
-    </div>
-
-    <div class="field field--checkbox">
-      <input type="checkbox" id="setting-use-window" checked>
-      <label for="setting-use-window">Apply the time window when timestamps are reliable</label>
-    </div>
-    <p class="field__hint field__hint--indent" id="window-status"></p>
-
-    <div class="settings-actions">
-      <button type="button" class="btn btn--primary" id="btn-apply-settings">Apply settings</button>
-      <button type="button" class="btn btn--ghost" id="btn-reset-settings">Reset Defaults</button>
-    </div>
-
-    <p class="panel__note">
-      Changing these values re-runs the analysis on the data already in your browser. Nothing is
-      re-uploaded, and these settings are forgotten when you close or refresh the tab.
-    </p>
+      <p class="card__note">
+        Full detail, including export caveats and false-positive examples, is in <code>README.md</code>.
+      </p>
+    </section>
   </section>
 
-
-  <!-- ===================================================================
-       How to think like a SOC analyst (required educational section)
-       =================================================================== -->
-  <section class="panel" aria-labelledby="soc-heading">
-    <h2 class="panel__heading" id="soc-heading">
-      <span aria-hidden="true">&#129504;</span> How to Think Like a SOC Analyst
-    </h2>
-    <p class="panel__lede">
-      A Security Operations Centre (SOC) is the team that watches an organisation's
-      systems for suspicious activity. "Triage" is the first, fastest pass: deciding which
-      alerts deserve a human's attention, and in what order. This is the workflow they follow.
-    </p>
-
-    <ol class="workflow">
-      <li><strong>Identify the event.</strong> What is it? Event ID 4625 means a logon attempt failed.</li>
-      <li><strong>Understand what happened.</strong> Read the details: which account, from where, at what time.</li>
-      <li><strong>Identify the affected user or system.</strong> Is this an ordinary user, an administrator, a service account, or a machine account?</li>
-      <li><strong>Decide whether the activity is expected.</strong> Is it normal for this account, this hour, this device? You often cannot know from the log alone &mdash; so say so, rather than guessing.</li>
-      <li><strong>Look for related events.</strong> Was there a logoff, a new process, a privilege change around the same time?</li>
-      <li><strong>Correlate authentication and privilege activity.</strong> Failed logons that are followed by a success tell a different story than failures on their own.</li>
-      <li><strong>Gather additional evidence.</strong> Endpoint logs, VPN records, badge access, ticket history, the user themselves.</li>
-      <li><strong>Decide whether escalation is required.</strong> Document what you saw, what you ruled out, and what remains open.</li>
-    </ol>
-
-    <div class="key-quote">
-      <p>"One security event rarely tells the entire story. Analysts build context by correlating multiple events."</p>
-      <p>"A detection is a reason to investigate, not proof that an attacker is present."</p>
-    </div>
-  </section>
-
-  <!-- ===================================================================
-       Beginner Event ID reference (required educational section)
-       =================================================================== -->
-  <section class="panel" aria-labelledby="ref-heading">
-    <h2 class="panel__heading" id="ref-heading">
-      <span aria-hidden="true">&#128218;</span> Windows Event ID reference for beginners
-    </h2>
-    <p class="panel__lede">
-      Windows has thousands of Event IDs. These are the ten worth knowing first for
-      authentication, account and privilege activity. All of them are explained in plain
-      English, and none of them proves that anything bad has happened.
-    </p>
-    <div class="table-scroll">
-      <table class="ref-table">
-        <caption class="sr-only">Windows Event IDs supported by this tool, with plain-English explanations</caption>
-        <thead>
-          <tr>
-            <th scope="col">Event ID</th>
-            <th scope="col">What it records</th>
-            <th scope="col">Why an analyst cares</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="ref-id">4624</td>
-            <td>Successful logon</td>
-            <td>Context, not a warning. It matters when it follows a burst of failures, or happens on a machine or account that should not be logging in.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4625</td>
-            <td>Failed logon</td>
-            <td>One is routine. A pattern is interesting: a wrong password, a stale service credential, or somebody guessing.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4688</td>
-            <td>Process created</td>
-            <td>Shows what ran. Only recorded if process-creation auditing is switched on, so absence proves nothing.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4720</td>
-            <td>User account created</td>
-            <td>Normal for administrators. Worth verifying, because attackers also create accounts to keep access.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4726</td>
-            <td>User account deleted</td>
-            <td>Usually tidy administration; occasionally a sign of somebody covering their tracks.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4728</td>
-            <td>Member added to a global security group</td>
-            <td>Becomes important when the group is privileged, such as Domain Admins.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4732</td>
-            <td>Member added to a local security group</td>
-            <td>The same idea locally &mdash; for example adding an account to local Administrators.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">1102</td>
-            <td>Security audit log cleared</td>
-            <td>Can be legitimate maintenance, but it also removes evidence, so it is normally investigated.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">4104</td>
-            <td>PowerShell script block logging</td>
-            <td>Visibility into PowerShell commands, which is genuinely useful for both admins and attackers.</td>
-          </tr>
-          <tr>
-            <td class="ref-id">7045</td>
-            <td>Service installed</td>
-            <td>Often ordinary software installation; also a classic way to make malware start automatically.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ===================================================================
-       Honest limitations
-       =================================================================== -->
-  <section class="panel" aria-labelledby="limits-heading">
-    <h2 class="panel__heading" id="limits-heading">
-      <span aria-hidden="true">&#9888;</span> What this tool cannot do
-    </h2>
-    <p class="panel__lede">
-      Knowing the limits of a tool is part of being a good analyst. This is a learning
-      aid, not a security product.
-    </p>
-    <ul class="limits-list">
-      <li><strong>An event is not proof.</strong> Every finding here is a reason to look further, never a verdict.</li>
-      <li><strong>Absence of evidence is not evidence of absence.</strong> If process-creation or PowerShell auditing was switched off, those events simply do not exist in the export.</li>
-      <li><strong>CSV exports differ between machines.</strong> Column names, date formats and encodings vary with Windows version and regional settings.</li>
-      <li><strong>Not every event carries a source IP.</strong> Local and console logons legitimately have none.</li>
-      <li><strong>No baselining.</strong> The tool cannot know whether a login is normal <em>for you</em>; only a human with context can decide that.</li>
-      <li><strong>No cross-system correlation.</strong> It sees only the file you give it, so it cannot link activity across several computers.</li>
-      <li><strong>Timestamps can be ambiguous.</strong> Where a file does not make day/month order clear, the tool says so and disables time-window rules rather than guessing.</li>
-      <li><strong>It is not an EDR, SIEM or SOC platform</strong>, and does not replace one.</li>
-    </ul>
-  </section>
 
 </main>
 
-<!-- =====================================================================
-     Footer
-     ===================================================================== -->
-<footer class="site-footer">
-  <div class="wrap site-footer__inner">
+<footer class="app-footer">
+  <div class="app-footer__inner">
     <p><strong>Security Log Triage Lab</strong> &mdash; Windows Security Event Log Triage Tool</p>
-    <p>
-      Your Windows security logs are analysed locally in your browser. Files are not uploaded or
-      transmitted anywhere. No analytics, no tracking, no cookies, no external API.
-    </p>
     <p>
       Educational SOC triage tool. Findings indicate activity that may deserve investigation and do
       not prove malicious behaviour. Only analyse logs from systems you own or are authorised to investigate.
     </p>
-    <p id="footer-version">Version 1.0.0 &middot; build step 1: interface and CSV parser</p>
+    <p id="footer-version">Version 1.0.0</p>
   </div>
 </footer>
 
@@ -698,6 +890,7 @@ Get-WinEvent -FilterHashtable @{LogName='Security'; Id=$ids} |
 <script src="triage-core.js"></script>
 <script src="samples/sample-data.js"></script>
 <script src="script.js"></script>
+
 
 </body>
 </html>

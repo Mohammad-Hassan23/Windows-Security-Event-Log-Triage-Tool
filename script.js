@@ -97,8 +97,13 @@
       'dashboard-panel', 'dash-total', 'dash-success', 'dash-failed', 'dash-created', 'dash-priv',
       'dash-cleared', 'dash-process', 'dash-investigate', 'dash-top-accounts', 'dash-top-failures',
       'dash-top-ids', 'dash-severity', 'dash-timeline-body', 'dash-timeline-note',
+      'dash-activity', 'dash-activity-range', 'dash-activity-note', 'dash-scope',
+      'workspace-empty', 'events-empty', 'details-card',
+      'btn-open-events', 'btn-privacy-jump', 'btn-goto-dashboard',
+      'tab-dashboard', 'tab-events', 'tab-learn', 'tab-export', 'tab-privacy',
+      'panel-dashboard', 'panel-events', 'panel-learn', 'panel-export', 'panel-privacy',
       'admin-panel', 'admin-summary', 'admin-explanation', 'admin-body',
-      'explorer-panel', 'filter-eventid', 'filter-account', 'filter-severity', 'filter-ip',
+      'explorer-panel', 'explorer-heading', 'filter-eventid', 'filter-account', 'filter-severity', 'filter-ip',
       'filter-category', 'filter-search', 'btn-clear-filters', 'filter-count', 'events-body',
       'events-limit-note',
       'settings-panel', 'setting-threshold', 'setting-window', 'setting-use-window', 'window-status',
@@ -109,6 +114,85 @@
       dom[id] = $(id);
     });
   }
+
+  /* ------------------------------------------------------------------------
+   * Tab navigation
+   * ------------------------------------------------------------------------
+   * A small ARIA tablist implementation: click to switch, arrow keys / Home / End
+   * to move between tabs, and only the active tab is in the tab order. No routing
+   * and no history API - the state of a demo should not depend on the URL.
+   */
+  const TAB_IDS = ['tab-dashboard', 'tab-events', 'tab-learn', 'tab-export', 'tab-privacy'];
+  const PANEL_IDS = ['panel-dashboard', 'panel-events', 'panel-learn', 'panel-export', 'panel-privacy'];
+
+  function selectTab(tabId) {
+    if (TAB_IDS.indexOf(tabId) === -1) return;
+
+    TAB_IDS.forEach(function (id) {
+      const tab = $(id);
+      if (!tab) return;
+      const selected = id === tabId;
+      tab.classList.toggle('is-active', selected);
+      tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+      tab.tabIndex = selected ? 0 : -1;
+    });
+
+    PANEL_IDS.forEach(function (id) {
+      const panel = $(id);
+      if (!panel) return;
+      panel.hidden = id !== tabId.replace('tab-', 'panel-');
+    });
+  }
+
+  function initTabs() {
+    const tabs = TAB_IDS.map(function (id) { return $(id); }).filter(Boolean);
+    if (!tabs.length) return;
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () { selectTab(tab.id); });
+
+      tab.addEventListener('keydown', function (event) {
+        const index = tabs.indexOf(tab);
+        let next = -1;
+
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+
+        event.preventDefault();
+        selectTab(tabs[next].id);
+        tabs[next].focus();
+      });
+    });
+
+    selectTab('tab-dashboard');
+  }
+
+  /* ------------------------------------------------------------------------
+   * Empty states
+   * ------------------------------------------------------------------------
+   * Before any data is loaded the dashboard shows an invitation, not fake
+   * numbers. Opening the Events tab before loading anything explains how to get
+   * there. Both are switched off as soon as real data exists.
+   */
+  function setWorkspaceEmpty(isEmpty) {
+    ['workspace-empty', 'events-empty'].forEach(function (id) {
+      const node = dom[id];
+      if (!node) return;
+      if (isEmpty) node.removeAttribute('hidden');
+      else node.setAttribute('hidden', '');
+    });
+
+    /* File details are meaningless without a file, so the collapsible panel is
+       only offered once something has been parsed. */
+    if (dom['details-card']) {
+      if (isEmpty) dom['details-card'].setAttribute('hidden', '');
+      else dom['details-card'].removeAttribute('hidden');
+    }
+  }
+
 
   /* ------------------------------------------------------------------------
    * Status and error display
@@ -243,6 +327,9 @@
     renderRecognition(result);
     renderPreview(result);
 
+    // Real data is present, so the invitation empty state goes away.
+    setWorkspaceEmpty(false);
+
     // Rebuild the filter choices for the new file, and start with no filters.
     state.filters = { eventId: '', account: '', severity: '', sourceIp: '', category: '', search: '' };
     populateFilterOptions(result);
@@ -262,6 +349,7 @@
   function renderParseFailure(result) {
     setHidden(dom['parse-panel'], true);
     setHidden(dom['file-meta'], true);
+    setWorkspaceEmpty(true);
 
     const error = result && result.errors && result.errors[0]
       ? result.errors[0]
@@ -651,8 +739,27 @@
     }
 
     addSection('Why this matters', finding.whyItMatters);
-    addSection('Possible benign explanation', finding.benign);
-    addSection('Suggested investigation', finding.investigation, true);
+
+    /* The longer reference material collapses, so a finding stays scannable while
+       all of it remains one click away. */
+    const details = el('details', 'finding__details');
+    details.appendChild(el('summary', null, 'Benign explanation and investigation steps'));
+
+    if (finding.benign) {
+      const benign = el('div', 'finding__section');
+      benign.appendChild(el('h4', null, 'Possible benign explanation'));
+      benign.appendChild(el('p', null, finding.benign));
+      details.appendChild(benign);
+    }
+    if (finding.investigation && finding.investigation.length) {
+      const steps = el('div', 'finding__section');
+      steps.appendChild(el('h4', null, 'Suggested investigation'));
+      const list = el('ol');
+      finding.investigation.forEach(function (step) { list.appendChild(el('li', null, step)); });
+      steps.appendChild(list);
+      details.appendChild(steps);
+    }
+    card.appendChild(details);
 
     if (finding.score.factors.length) {
       const score = el('div', 'score');
@@ -747,6 +854,21 @@
     set('dash-process', dashboard.processCreations);
     set('dash-investigate', dashboard.eventsRequiringInvestigation);
 
+    /* A one-line scope statement so the numbers always have context. */
+    if (dom['dash-scope']) {
+      const scope = [];
+      if (state.fileName) scope.push(state.fileName);
+      scope.push(plural(dashboard.totalEvents, 'event'));
+      if (state.isDemo) scope.push('Demo Data');
+      if (state.result && state.result.stats && state.result.stats.timeRange) {
+        scope.push('from ' + Core.toIsoString(state.result.stats.timeRange.startMs).slice(0, 10)
+          + ' to ' + Core.toIsoString(state.result.stats.timeRange.endMs).slice(0, 10));
+      }
+      dom['dash-scope'].textContent = scope.join(' \u00B7 ');
+    }
+
+    renderActivityChart(dashboard);
+
     renderBarList(dom['dash-top-accounts'],
       dashboard.topAccounts.map(function (item) { return { label: item.account, value: item.count }; }),
       'No account names were found in this file.',
@@ -803,6 +925,112 @@
       }
     }
   }
+
+  /* ------------------------------------------------------------------------
+   * Activity chart
+   * ------------------------------------------------------------------------
+   * A CSS bar chart built from the events actually in the file: one bar per
+   * time bucket, with the count and the bucket label in the tooltip and in the
+   * accessible name. No chart library, no canvas, no invented data.
+   *
+   * When the timestamps are missing or ambiguous the chart is replaced with an
+   * explanation, because a timeline drawn from unreliable times would be a lie.
+   */
+  function renderActivityChart(dashboard) {
+    const container = dom['dash-activity'];
+    const rangeNode = dom['dash-activity-range'];
+    const noteNode = dom['dash-activity-note'];
+    if (!container) return;
+
+    clear(container);
+
+    if (rangeNode) rangeNode.textContent = '';
+    if (noteNode) setHidden(noteNode, true);
+
+    if (!dashboard.timelineAvailable) {
+      container.appendChild(el('div', 'chart__empty',
+        'No reliable timestamps in this file, so activity cannot be plotted over time.'));
+      if (noteNode) {
+        noteNode.textContent = 'The events are still analysed; only the time-based view is unavailable.';
+        setHidden(noteNode, false);
+      }
+      return;
+    }
+
+    const events = (state.result && state.result.events) || [];
+    const times = [];
+    events.forEach(function (event) {
+      if (event.timestamp && event.timestamp.valid) times.push(event.timestamp.ms);
+    });
+
+    if (!times.length) {
+      container.appendChild(el('div', 'chart__empty', 'No readable timestamps in this file.'));
+      return;
+    }
+
+    const minMs = Math.min.apply(null, times);
+    const maxMs = Math.max.apply(null, times);
+    const spanMs = Math.max(maxMs - minMs, 1);
+
+    /* Pick a bucket size that suits the span, so a short burst does not collapse
+       into a single bar and a month of activity does not need hundreds. */
+    const MINUTE = 60000;
+    const HOUR = 60 * MINUTE;
+    const DAY = 24 * HOUR;
+    let bucketMs;
+    let bucketName;
+
+    if (spanMs <= 30 * MINUTE) { bucketMs = MINUTE; bucketName = '1-minute'; }
+    else if (spanMs <= 6 * HOUR) { bucketMs = 15 * MINUTE; bucketName = '15-minute'; }
+    else if (spanMs <= 36 * HOUR) { bucketMs = HOUR; bucketName = 'hourly'; }
+    else if (spanMs <= 40 * DAY) { bucketMs = DAY; bucketName = 'daily'; }
+    else { bucketMs = 7 * DAY; bucketName = 'weekly'; }
+
+    const buckets = {};
+    let peak = 0;
+    times.forEach(function (ms) {
+      const key = Math.floor((ms - minMs) / bucketMs);
+      buckets[key] = (buckets[key] || 0) + 1;
+      if (buckets[key] > peak) peak = buckets[key];
+    });
+
+    const maxBucket = Math.max.apply(null, Object.keys(buckets).map(Number));
+    const barCount = Math.min(maxBucket + 1, 44);
+
+    for (let i = 0; i < barCount; i++) {
+      const count = buckets[i] || 0;
+      const bucketStart = minMs + i * bucketMs;
+      const label = Core.toIsoString(bucketStart).slice(0, bucketMs < HOUR ? 16 : 10);
+      const bar = el('div', 'chart__bar');
+      const height = count === 0 ? 2 : Math.max(6, Math.round((count / peak) * 100));
+      bar.setAttribute('style', 'height:' + height + '%');
+      bar.setAttribute('title', label + ': ' + plural(count, 'event'));
+      bar.setAttribute('aria-label', label + ': ' + plural(count, 'event'));
+      bar.setAttribute('role', 'img');
+      if (count === 0) bar.setAttribute('aria-hidden', 'true');
+      container.appendChild(bar);
+    }
+
+    const axis = el('div', 'chart__axis');
+    axis.appendChild(el('span', null, Core.toIsoString(minMs).slice(0, 16)));
+    axis.appendChild(el('span', null, Core.toIsoString(maxMs).slice(0, 16)));
+
+    /* Re-rendering (for example after changing a setting) must not stack up
+       axis labels, so any previous one is removed first. */
+    const parent = container.parentNode;
+    if (parent) {
+      Array.prototype.slice.call(parent.querySelectorAll('.chart__axis')).forEach(function (node) {
+        node.parentNode.removeChild(node);
+      });
+      parent.insertBefore(axis, container.nextSibling);
+    }
+
+    if (rangeNode) {
+      rangeNode.textContent = plural(events.length, 'event') + ' in ' + bucketName + ' buckets';
+    }
+  }
+
+  /* __CHUNK__ */
 
   /* ------------------------------------------------------------------------
    * Administrative / privilege activity
@@ -960,6 +1188,7 @@
   function renderExplorer() {
     if (!state.result || !state.result.ok) return;
     setHidden(dom['explorer-panel'], false);
+    if (dom['events-empty']) dom['events-empty'].setAttribute('hidden', '');
 
     const filters = state.filters;
     const search = (filters.search || '').trim().toLowerCase();
@@ -1166,6 +1395,7 @@
     setHidden(dom['dashboard-panel'], true);
     setHidden(dom['admin-panel'], true);
     setHidden(dom['explorer-panel'], true);
+    setWorkspaceEmpty(true);
     clearError();
     clear(dom['preview-body']);
     clear(dom['detected-columns']);
@@ -1335,7 +1565,22 @@
 
   function init() {
     cacheDom();
+    initTabs();
     bindUpload();
+
+    if (dom['btn-open-events']) {
+      dom['btn-open-events'].addEventListener('click', function () {
+        selectTab('tab-events');
+        const heading = dom['explorer-heading'];
+        if (heading && typeof heading.focus === 'function') heading.focus();
+      });
+    }
+    if (dom['btn-privacy-jump']) {
+      dom['btn-privacy-jump'].addEventListener('click', function () { selectTab('tab-privacy'); });
+    }
+    if (dom['btn-goto-dashboard']) {
+      dom['btn-goto-dashboard'].addEventListener('click', function () { selectTab('tab-dashboard'); });
+    }
 
     if (dom['btn-reset']) dom['btn-reset'].addEventListener('click', resetAll);
 
@@ -1375,6 +1620,9 @@
       dom['footer-version'].textContent = 'Version ' + Core.VERSION
         + ' - educational SOC triage tool. Findings are a reason to investigate, not proof.';
     }
+
+    // Before any data: show the invitation, and do not offer file details.
+    setWorkspaceEmpty(true);
 
     // Turn on the demo buttons. If samples/sample-data.js is missing they stay
     // disabled and the note below says why, instead of failing silently.
